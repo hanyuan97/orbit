@@ -2,28 +2,15 @@
 
 [English](./integrations.md) · [繁體中文](./integrations.zh-TW.md)
 
-與 Orbit 整合的第三方工具。整合建立在 Orbit 公開的 JSON CLI contract 上，詳見
-[Agent CLI contract](./agent-cli.zh-TW.md)。各工具的功能與疑難排解以該工具自己的
-repository 為準。
+建立在 Orbit [JSON CLI contract](./agent-cli.zh-TW.md) 上的工具。
 
 ## Orbit for Orca
 
-[Orca](https://www.onorca.dev) 是在 worktree 中執行 coding agent 的桌面應用程式。
-Orbit for Orca plugin 會在 Orca 右側 sidebar 加入一個唯讀的 Orbit 狀態面板，顯示：
-
-- 預設 runtime 與 named instances；
-- 每個 instance 的 containers 與 services；
-- 其 SQL projects 的同步狀態。
-
-需要 Orbit 0.16.10 以上、Orca 1.4.247 以上，且 `orbit` 在 `PATH` 中。
-
-1. 在 Orca 開啟 Settings → Plugins → Add → "From a Git URL…"，輸入
-   `https://github.com/iml885203/orca-orbit`，並確認 plugin 的權限。它只要求
-   `workspace:read`，用來找出 log 分頁要開在哪個 workspace。
-2. 從 Orca 右側 sidebar 開啟 Orbit 面板。
-3. 選取 instance 查看其 resources 與 SQL 狀態。在 resource 上按 Enter 或雙擊，
-   即可在 terminal 分頁開啟它的 logs。
+在 [Orca](https://www.onorca.dev) sidebar 加入唯讀的 Orbit 面板：instances、其
+containers 與 services、SQL 同步狀態，並可在 terminal 分頁開啟 logs。
 
 ![Orca 右側 sidebar 中的 Orbit 面板](./assets/integrations/orca-orbit-panel.png)
 
-其他內容請見 [plugin repository](https://github.com/iml885203/orca-orbit)。
+安裝：在 Orca 開啟 Settings → Plugins → Add → "From a Git URL…"，輸入
+`https://github.com/iml885203/orca-orbit`。需要 Orbit 0.16.10+ 與 Orca 1.4.247+。
+詳細內容見 [plugin repository](https://github.com/iml885203/orca-orbit)。
