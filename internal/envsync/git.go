@@ -15,8 +15,22 @@ type CloneError struct {
 }
 
 func (e *CloneError) Error() string {
+	return fmt.Sprintf("git clone %s: %v\n%s", e.DisplayURL(), e.Err, e.RedactedOutput())
+}
+
+// RedactedOutput is Git's output with the URL's credentials removed. Git
+// strips userinfo itself but echoes the query, so a query left over after
+// replacing the full URL is removed on its own.
+func (e *CloneError) RedactedOutput() string {
 	output := strings.ReplaceAll(e.Output, e.URL, e.DisplayURL())
-	return fmt.Sprintf("git clone %s: %v\n%s", e.DisplayURL(), e.Err, output)
+	// The query is cut from the raw URL, not url.Parse, so a URL that does
+	// not parse still loses it.
+	if _, rest, found := strings.Cut(e.URL, "?"); found {
+		if query, _, _ := strings.Cut(rest, "#"); query != "" {
+			output = strings.ReplaceAll(output, "?"+query, "")
+		}
+	}
+	return output
 }
 
 func (e *CloneError) Unwrap() error {
@@ -103,35 +117,43 @@ func gitIn(dir string, args ...string) ([]byte, error) {
 func displayURL(raw string) string {
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return stripUnparsedUserinfo(raw)
+		return stripUnparsedCredentials(raw)
 	}
-	if parsed.User == nil {
+	remote := parsed.IsAbs() && parsed.Host != ""
+	if parsed.User == nil && !(remote && (parsed.RawQuery != "" || parsed.ForceQuery)) {
 		return raw
 	}
 	parsed.User = nil
+	if remote {
+		parsed.RawQuery = ""
+		parsed.ForceQuery = false
+	}
 	return parsed.String()
 }
 
-// stripUnparsedUserinfo still hides credentials when url.Parse rejects the
+// stripUnparsedCredentials still hides credentials when url.Parse rejects the
 // URL, for example a password with a bad percent-escape. SCP-style remotes
 // (git@host:path) have no "://" and carry no secret, so they pass through.
-func stripUnparsedUserinfo(raw string) string {
+func stripUnparsedCredentials(raw string) string {
 	scheme, rest, found := strings.Cut(raw, "://")
 	if !found {
 		return raw
 	}
-	authority, path, _ := strings.Cut(rest, "/")
-	at := strings.LastIndex(authority, "@")
-	if at < 0 {
-		return raw
+	rest, _, _ = strings.Cut(rest, "?")
+	authority, path, hasPath := strings.Cut(rest, "/")
+	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		authority = authority[at+1:]
 	}
-	redacted := scheme + "://" + authority[at+1:]
-	if len(rest) > len(authority) {
+	redacted := scheme + "://" + authority
+	if hasPath {
 		redacted += "/" + path
 	}
 	return redacted
 }
 
+// RedactURL removes the credentials a remote URL can carry: userinfo, and the
+// query of an absolute URL. Git never sends a query to a smart-HTTP remote
+// intact (it appends /info/refs after it), so dropping it loses nothing.
 func RedactURL(raw string) string {
 	return displayURL(raw)
 }

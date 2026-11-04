@@ -18,6 +18,7 @@ import (
 	"github.com/iml885203/orbit/instance"
 	daemonsrv "github.com/iml885203/orbit/internal/daemon"
 	"github.com/iml885203/orbit/internal/engine"
+	"github.com/iml885203/orbit/internal/envsync"
 	"github.com/iml885203/orbit/internal/history"
 	"github.com/iml885203/orbit/internal/shellquote"
 	"github.com/spf13/cobra"
@@ -548,9 +549,27 @@ func commandString() string {
 		parts = append(parts, os.Args[1:]...)
 	}
 	for i := 1; i < len(parts); i++ {
-		parts[i] = shellquote.Quote(parts[i])
+		parts[i] = shellquote.Quote(redactArgURL(parts[i]))
 	}
 	return strings.Join(parts, " ")
+}
+
+// redactArgURL hides URL credentials in an argument echoed into the JSON
+// envelope and CLI history, whether it is a bare URL or a --flag=URL value.
+// Arguments with whitespace, such as a SQL query, are left as typed. The echo
+// is never replayed and any query may carry a token, so dropping a URL's query
+// here loses nothing either.
+func redactArgURL(arg string) string {
+	if strings.HasPrefix(arg, "-") {
+		if flag, value, ok := strings.Cut(arg, "="); ok {
+			return flag + "=" + redactArgURL(value)
+		}
+		return arg
+	}
+	if !strings.Contains(arg, "://") || strings.ContainsAny(arg, " \t\n") {
+		return arg
+	}
+	return envsync.RedactURL(arg)
 }
 
 // version and buildTime are injected via -ldflags at build time. Version is

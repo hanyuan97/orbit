@@ -104,3 +104,40 @@ func TestRefreshFailurePreservesStoredLocationAndRollsBackActivatedCache(t *test
 		t.Fatalf("new cache remained active after registry failure: %s", active)
 	}
 }
+
+func TestRefreshFailurePersistsNoQueryToken(t *testing.T) {
+	bin := t.TempDir()
+	// Like real Git: userinfo is stripped from the echoed URL, the query is not.
+	script := `#!/bin/sh
+printf "fatal: unable to access 'https://example.com/envs.git?access_token=secret/'\n" >&2
+exit 128
+`
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	orbitHome := t.TempDir()
+	registry, err := Load(RegistryPath(orbitHome))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := Source{Name: "team", Type: TypeGit, URL: "https://user:pw@example.com/envs.git?access_token=secret"}
+	if err := registry.Add(source); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Refresh(registry, source, orbitHome, false, true); err == nil {
+		t.Fatal("refresh succeeded against a failing git")
+	}
+	stored, err := registry.Get("team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.LastSyncError == "" {
+		t.Fatal("failure was not recorded")
+	}
+	for field, value := range map[string]string{"url": stored.URL, "last_sync_error": stored.LastSyncError} {
+		if strings.Contains(value, "secret") || strings.Contains(value, "pw@") {
+			t.Fatalf("persisted %s leaks URL credentials: %q", field, value)
+		}
+	}
+}
