@@ -198,12 +198,12 @@ func TestDockerObservationOutageInvalidatesAndReconcilesRuntimeTruth(t *testing.
 		t.Fatalf("redis = %s/%q after Docker returned, want healthy", redis.State, redis.StateReason)
 	}
 
-	o.OnContainerMissing("kafka")
+	o.OnContainerMissing("kafka", time.Now())
 	kafka, _ := o.GetServiceInfo("kafka")
 	if kafka.StateReason != DockerObservationUnavailableReason {
 		t.Fatalf("first partial snapshot discarded Docker recovery context: %q", kafka.StateReason)
 	}
-	o.OnContainerMissing("kafka")
+	o.OnContainerMissing("kafka", time.Now())
 	kafka, _ = o.GetServiceInfo("kafka")
 	if kafka.State != StateDegraded || kafka.StateReason != "container removed outside orbit" {
 		t.Fatalf("kafka = %s/%q after Docker returned, want specific removal", kafka.State, kafka.StateReason)

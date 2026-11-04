@@ -150,7 +150,7 @@ func (o *Orchestrator) OnContainerObserved(name string, obs ContainerObservation
 	running, startedAt := obs.Running, obs.StartedAt
 	o.mu.Lock()
 	info, exists := o.services[name]
-	if !exists {
+	if !exists || info.predates(obs.ListedAt) {
 		o.mu.Unlock()
 		return nil
 	}
@@ -235,12 +235,14 @@ func (o *Orchestrator) RecordContainerStarted(name string, generation int, conta
 	}
 }
 
-// A single empty snapshot immediately after Docker reconnects is not enough
-// evidence that a previously-owned runtime was removed.
-func (o *Orchestrator) OnContainerMissing(name string) {
+// OnContainerMissing reconciles a tracked container absent from a poll that
+// listed Docker's containers at listedAt. A single empty snapshot immediately
+// after Docker reconnects is not enough evidence that a previously-owned
+// runtime was removed.
+func (o *Orchestrator) OnContainerMissing(name string, listedAt time.Time) {
 	o.mu.Lock()
 	info, exists := o.services[name]
-	if !exists || info.Kind != "container" {
+	if !exists || info.Kind != "container" || info.predates(listedAt) {
 		o.mu.Unlock()
 		return
 	}
@@ -255,8 +257,11 @@ func (o *Orchestrator) OnContainerMissing(name string) {
 			return
 		}
 	}
+	stopped := info.reconcileContainerGone()
 	o.mu.Unlock()
-	o.OnContainerGone(name)
+	if stopped {
+		o.broadcast(Event{Type: EventProcessExited, Service: name, Message: "stopped"})
+	}
 }
 
 // A live observation is required to keep claiming container health; stopped
@@ -296,29 +301,37 @@ func (o *Orchestrator) OnContainerGone(name string) {
 		o.mu.Unlock()
 		return
 	}
-	info.ContainerMissingObservations = 0
-	prev := info.State
-	switch prev {
-	case StateStopping:
-		info.Transition(StateStopped)
-	case StateDegraded:
-		if info.AwaitingContainerRemoval {
-			info.Transition(StateStopped)
-		} else if info.StateReason == DockerObservationUnavailableReason {
-			info.StateReason = "container removed outside orbit"
-			info.FailureKind = FailureKindRuntime
-		}
-	case StateHealthy:
-		info.Transition(StateDegraded)
-		info.StateReason = "container removed outside orbit"
-		info.FailureKind = FailureKindRuntime
-	}
-	newState := info.State
+	stopped := info.reconcileContainerGone()
 	o.mu.Unlock()
 
-	if prev != newState && newState == StateStopped {
+	if stopped {
 		o.broadcast(Event{Type: EventProcessExited, Service: name, Message: "stopped"})
 	}
+}
+
+// reconcileContainerGone applies OnContainerGone's transitions and reports
+// whether the container reached stopped. Caller must hold the owning
+// Orchestrator's mutex, so a poll's staleness check and the transition it
+// guards happen in one critical section.
+func (i *ServiceInfo) reconcileContainerGone() (stopped bool) {
+	i.ContainerMissingObservations = 0
+	prev := i.State
+	switch prev {
+	case StateStopping:
+		i.Transition(StateStopped)
+	case StateDegraded:
+		if i.AwaitingContainerRemoval {
+			i.Transition(StateStopped)
+		} else if i.StateReason == DockerObservationUnavailableReason {
+			i.StateReason = "container removed outside orbit"
+			i.FailureKind = FailureKindRuntime
+		}
+	case StateHealthy:
+		i.Transition(StateDegraded)
+		i.StateReason = "container removed outside orbit"
+		i.FailureKind = FailureKindRuntime
+	}
+	return prev != i.State && i.State == StateStopped
 }
 
 // StopService sets a service to Stopping, calls the appropriate stop callback,
