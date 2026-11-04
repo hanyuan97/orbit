@@ -93,6 +93,13 @@ type ResourceStatus struct {
 	// backend, or infra.
 	Role  string `json:"role,omitempty"`
 	State string `json:"state"`
+	// StartingPhase splits "starting" into "launching" (port check,
+	// pre_start, process exec or container start) and "probing" (waiting
+	// for readiness); empty in every other state.
+	StartingPhase string `json:"starting_phase,omitempty"`
+	// PID is the managed host process's pid while Orbit supervises one;
+	// absent for containers and stopped services.
+	PID int `json:"pid,omitempty"`
 	// PendingDependencies identifies exactly what keeps a pending resource
 	// from starting, so clients can distinguish useful waiting from a
 	// terminal dependency failure.
@@ -145,7 +152,7 @@ type ResourcePortConflict struct {
 
 // HealthProgressInfo reports retry state for a resource that has a
 // configured health check. nil on ResourceStatus means the resource either
-// has no health check or has not yet attempted one (caller hides UI).
+// has no health check or has not yet started a probe (caller hides UI).
 type HealthProgressInfo struct {
 	Attempts   int    `json:"attempts"`
 	MaxRetries int    `json:"max_retries,omitempty"`
@@ -154,6 +161,20 @@ type HealthProgressInfo struct {
 	// still probing and will flip the service back to healthy on success.
 	// CLI waits treat degraded+recovering as "still trying", not terminal.
 	Recovering bool `json:"recovering,omitempty"`
+	// ProbeStartedAt is present only while a probe is in flight; a value
+	// that keeps aging means the probe itself never returned.
+	ProbeStartedAt *time.Time `json:"probe_started_at,omitempty"`
+	// LastProbeAt is when the most recent probe returned. Its verdict is
+	// recorded before the result reaches the lifecycle, so a starting
+	// resource with an empty LastErr and no probe in flight passed its
+	// probe but never turned healthy: a LastProbeAt that stops advancing
+	// means delivery is stuck, one that keeps advancing means monitoring
+	// runs and the transition was dropped.
+	LastProbeAt *time.Time `json:"last_probe_at,omitempty"`
+	// Protocol is the cleartext HTTP protocol that answered the last probe:
+	// "h2c" or the HTTP/1.x version, such as "HTTP/1.1". Absent for other
+	// check types and HTTPS.
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // LogsResponse is the response for GET /api/logs/{name}.

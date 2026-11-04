@@ -909,3 +909,37 @@ func TestStatusJSONWaitsForWholeEnvironmentBeforeOpeningApplication(t *testing.T
 		t.Fatalf("recommended_actions = %+v, want none while environment converges", envelope.RecommendedActions)
 	}
 }
+
+func TestStatusJSONShowsWhereAStartingResourceStopped(t *testing.T) {
+	cfg := &config.Config{Services: map[string]*config.Service{"basket-api": {}}}
+	probeStarted := time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)
+	lastProbe := probeStarted.Add(-time.Second)
+	running := map[string]daemon.ResourceStatus{
+		"basket-api": {
+			Name:          "basket-api",
+			Kind:          daemon.ResourceKindService,
+			State:         "starting",
+			StartingPhase: "probing",
+			PID:           4242,
+			HealthProgress: &daemon.HealthProgressInfo{
+				Attempts:       1,
+				MaxRetries:     12,
+				ProbeStartedAt: &probeStarted,
+				LastProbeAt:    &lastProbe,
+				Protocol:       "h2c",
+			},
+		},
+	}
+
+	service := renderStatusJSON(t, cfg, running, daemonStatus{Running: true}).Resources[0]
+
+	if service.StartingPhase != "probing" || service.PID != 4242 {
+		t.Fatalf("starting_phase = %q pid = %d, want probing and the managed pid", service.StartingPhase, service.PID)
+	}
+	hp := service.HealthProgress
+	if hp == nil || hp.Attempts != 1 || hp.Protocol != "h2c" ||
+		hp.ProbeStartedAt == nil || !hp.ProbeStartedAt.Equal(probeStarted) ||
+		hp.LastProbeAt == nil || !hp.LastProbeAt.Equal(lastProbe) {
+		t.Fatalf("health_progress = %+v, want the daemon's probe evidence", hp)
+	}
+}
