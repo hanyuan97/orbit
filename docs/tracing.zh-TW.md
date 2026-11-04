@@ -49,6 +49,8 @@ Trace 存在 in-memory ring buffer（預設 1000 條），`orbit down` 即清空
 ```bash
 orbit trace                  # 近期 trace，最新在前
 orbit trace -f               # 即時串流新進的 trace
+orbit trace --search item/1  # span 名稱或 attribute 值相符的 trace
+orbit trace --service api    # 經過該 service 的 trace
 orbit trace --json           # 結構化清單（給 agent）；搭配 -f 時輸出 NDJSON
 orbit trace <id>             # 一條 trace 的 ASCII waterfall
 orbit trace <id> --logs      # waterfall + 帶有這個 trace id 的 log 行
@@ -59,6 +61,19 @@ orbit tracing status         # receiver 健康嗎？用哪個 port？計數器
 沒有 trace 可顯示時，`orbit trace` 會依 receiver 的真實狀態說明原因 —— 關閉、
 開著但 receiver 沒 bind 成功、或開著但目前沒流量 —— 讓你分得出這三種。
 `orbit tracing status` 也會隨時回報同樣的健康狀態（並有 `--json` 供 script／agent）。
+
+span 標籤不會被截斷：清單把 root span 印在最後一欄，waterfall 把每個標籤印在
+bar 之後。
+
+### Health probe 流量
+
+Orbit 每隔幾秒探測每個 HTTP health check，有 instrument 的 service 會把每次探測
+變成一條 trace。probe 送出的 User-Agent 是 `orbit-health-probe`；root span 記錄了
+這個 user agent，或（instrumentation 沒記錄 user agent 時）root span 的 route／
+path 等於該資源的 `health_check.path`，就算 health 流量。`orbit trace` 與
+`GET /api/traces` 預設隱藏這類 trace（出錯的除外），人類可讀清單會說隱藏了幾條；
+`--include-health`（`?include_health=1`）會顯示它們。dashboard 的清單目前還不會
+隱藏。
 
 刻意沒有 `enable`／`disable` 指令：tracing 預設開啟，要單獨關掉某個 env 就是
 一行 `enabled: false` 的編輯 —— 跟其他每個 env 設定同一套心智模型。

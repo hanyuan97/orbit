@@ -249,8 +249,8 @@ These commands currently use the `orbit.cli.v1` envelope when `--json` is set:
 | `orbit init --json` | Returns the setup result in the envelope, with failures carrying the incomplete step. |
 | `orbit tunnel list --json` | Returns active claims in `data.claims` (paths, owner, target, status); `--all` includes other owners' claims with `mine` flags. |
 | `orbit tunnel release --json` | Returns the released count, paths or local port, and gateway in the envelope. |
-| `orbit trace --json` | Returns recent trace summaries in `data.traces`, newest first. |
-| `orbit trace -f --json` | Streams NDJSON trace-summary events, one JSON object per line. |
+| `orbit trace --json` | Returns recent trace summaries in `data.traces`, newest first; `--search` and `--service` narrow the list before `--limit`, and `--include-health` adds Orbit's own health-probe traces. |
+| `orbit trace -f --json` | Streams NDJSON trace-summary events, one JSON object per line; `--service`, `--include-health` and a summary-only `--search` apply to each event. |
 | `orbit trace <id> --json` | Returns one full trace (summary fields + `spans`) in `data`. |
 | `orbit tracing status --json` | Returns the receiver's health, the port in use, and ingest counters in `data`. |
 
@@ -452,13 +452,23 @@ state with `orbit tracing status --json`.
 
 ```bash
 orbit trace --json             # recent traces; --limit N caps the count
+orbit trace --search item/1 --json   # traces whose span names or attribute values contain the text
+orbit trace --service api --json     # traces that include that service
 orbit trace <trace-id> --json  # one full trace with its span tree
 orbit trace -f --json          # NDJSON stream of trace-summary updates
 ```
 
+Traces of Orbit's own health probes are hidden unless they errored (see
+[tracing.md](tracing.md#health-probe-traffic)); `--include-health` shows them.
+`data.hiddenHealthTraces` says how many matching traces were hidden.
+Under `-f`, `--search` sees only `rootService`, `rootName` and `services`,
+because summaries carry no spans, and a summary emitted before its root span
+arrives is not yet recognised as health traffic.
+
 A trace summary carries `traceId`, `rootService`, `rootName`, `startUnixNano`,
-`durationMs`, `spanCount`, `services` (distinct, first-seen order), and
-`status` (`ok` | `error`). The full trace adds `spans`, each with
+`durationMs`, `spanCount`, `services` (distinct, first-seen order),
+`status` (`ok` | `error`), and `health: true` on health-probe traffic (omitted
+otherwise). The full trace adds `spans`, each with
 `traceId`/`spanId`/`parentId`, `service`, `name`, `kind`, `startUnixNano`/
 `endUnixNano`/`durationMs`, `status`/`statusMsg`, and `attributes`. These key
 names are pinned by contract tests (`app/traces_json_test.go`) — treat
@@ -467,7 +477,8 @@ renames as breaking.
 In `-f --json` mode the same `traceId` may be emitted repeatedly as its trace
 accumulates spans; the latest event supersedes earlier ones.
 
-A typical agent workflow: `orbit trace --json` → pick the errored trace →
+A typical agent workflow: `orbit trace --search <path or text> --json` (or
+`orbit trace --json` → pick the errored trace) →
 `orbit trace <id> --json` to find the failing span → the trace's log lines via
 `GET /api/traces/{id}/logs` on the daemon, or `orbit trace <id> --logs` for
 human-readable output.

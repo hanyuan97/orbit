@@ -58,7 +58,10 @@ export function subscribeLiveTraces(): () => void {
 
 export async function fetchTraces(limit = 200): Promise<TraceSummary[]> {
   try {
-    const res = await fetch(`/api/traces?limit=${limit}`)
+    // The dashboard keeps its own filters and still lists health-probe
+    // traces (its live upserts carry them too), so it opts out of the
+    // API's default hiding.
+    const res = await fetch(`/api/traces?limit=${limit}&include_health=1`)
     if (res.ok) return (await res.json()) ?? []
     toast('trace list unavailable')
   } catch (e) {

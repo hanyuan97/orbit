@@ -7,7 +7,10 @@ import (
 	pub "github.com/iml885203/orbit/daemon"
 )
 
-const UpdateTransactionHeader = pub.UpdateTransactionHeader
+const (
+	UpdateTransactionHeader  = pub.UpdateTransactionHeader
+	HiddenHealthTracesHeader = pub.HiddenHealthTracesHeader
+)
 
 type (
 	APIResponse                  = pub.APIResponse

@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/iml885203/orbit/internal/tracing"
 )
 
 // registerTracingHandlers wires the trace query endpoints. The OTLP receiver
@@ -35,18 +37,37 @@ func (s *Server) handleTracingStatus(w http.ResponseWriter, r *http.Request) {
 // handleTracesList returns trace summaries newest-first. ?limit=N caps the
 // count (0 = all). The default of 100 is the API middle ground between the
 // CLI's one-screenful (50) and the dashboard's scrollable list (200) — those
-// surfaces pass their own explicit limits.
+// surfaces pass their own explicit limits. ?search=, ?service= and
+// ?include_health=1 narrow the list inside the store, before the limit (see
+// tracing.TraceFilter); the count of hidden health traces rides in
+// HiddenHealthTracesHeader.
 func (s *Server) handleTracesList(w http.ResponseWriter, r *http.Request) {
 	if requireMethod(w, r, http.MethodGet) {
 		return
 	}
+	q := r.URL.Query()
 	limit := 100
-	if v := r.URL.Query().Get("limit"); v != "" {
+	if v := q.Get("limit"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			limit = n
 		}
 	}
-	writeJSON(w, http.StatusOK, s.tracing.List(limit))
+	includeHealth := false
+	if v := q.Get("include_health"); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, APIResponse{Error: "include_health must be a boolean (true/false/1/0)"})
+			return
+		}
+		includeHealth = b
+	}
+	traces, hidden := s.tracing.List(limit, tracing.TraceFilter{
+		Search:        q.Get("search"),
+		Service:       q.Get("service"),
+		IncludeHealth: includeHealth,
+	})
+	w.Header().Set(HiddenHealthTracesHeader, strconv.Itoa(hidden))
+	writeJSON(w, http.StatusOK, traces)
 }
 
 // handleTraceDetail serves /api/traces/{id} (full trace) and

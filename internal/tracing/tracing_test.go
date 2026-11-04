@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -21,7 +22,7 @@ func TestSummarizeRootServiceAndDuration(t *testing.T) {
 		sp("t1", "c", "a", "api", "kafka produce", 100_000_000, 112_000_000, "ok"),
 	})
 
-	list := s.List(0)
+	list, _ := s.List(0, TraceFilter{})
 	if len(list) != 1 {
 		t.Fatalf("want 1 trace, got %d", len(list))
 	}
@@ -74,8 +75,8 @@ func TestRingBufferEvictsOldest(t *testing.T) {
 	if _, ok := s.Get("t3"); !ok {
 		t.Error("t3 should be present")
 	}
-	if c := len(s.List(0)); c != 2 {
-		t.Errorf("trace count = %d, want 2", c)
+	if list, _ := s.List(0, TraceFilter{}); len(list) != 2 {
+		t.Errorf("trace count = %d, want 2", len(list))
 	}
 }
 
@@ -182,4 +183,142 @@ func TestSetReceiverReflectedInStats(t *testing.T) {
 
 func spanID(i int) string {
 	return "s" + strconv.Itoa(i)
+}
+
+func withAttrs(s Span, kv ...string) Span {
+	s.Attributes = map[string]string{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		s.Attributes[kv[i]] = kv[i+1]
+	}
+	return s
+}
+
+func traceIDs(list []TraceSummary) []string {
+	ids := make([]string, len(list))
+	for i, t := range list {
+		ids[i] = t.TraceID
+	}
+	return ids
+}
+
+func TestListSearchReachesSpanNamesAndAttributes(t *testing.T) {
+	s := NewStore(10)
+	s.Ingest([]Span{
+		withAttrs(sp("t1", "a", "", "webapp", "GET", 0, 10, "ok"), "url.path", "/item/1"),
+		sp("t2", "a", "", "webapp", "GET /other", 1, 10, "ok"),
+		sp("t2", "b", "a", "catalog-api", "SELECT Catalog", 2, 5, "ok"),
+		sp("t3", "a", "", "worker", "tick", 3, 10, "ok"),
+	})
+	for _, tc := range []struct {
+		search string
+		want   []string
+	}{
+		{"ITEM/1", []string{"t1"}},         // attribute value, case-insensitive
+		{"select catalog", []string{"t2"}}, // child span name
+		{"worker", []string{"t3"}},         // root service
+		{"catalog-api", []string{"t2"}},    // downstream service
+		{"nothing-matches", []string{}},    // empty, not nil-panicking
+		{"", []string{"t3", "t2", "t1"}},   // no search keeps everything, newest first
+	} {
+		list, _ := s.List(0, TraceFilter{Search: tc.search})
+		if got := traceIDs(list); strings.Join(got, ",") != strings.Join(tc.want, ",") {
+			t.Errorf("search %q = %v, want %v", tc.search, got, tc.want)
+		}
+	}
+}
+
+func TestListServiceFilterAndLimitAfterFiltering(t *testing.T) {
+	s := NewStore(10)
+	s.Ingest([]Span{
+		sp("t1", "a", "", "webapp", "GET /a", 1, 10, "ok"),
+		sp("t1", "b", "a", "catalog-api", "GET /items", 2, 5, "ok"),
+		sp("t2", "a", "", "webapp", "GET /b", 2, 10, "ok"),
+		sp("t3", "a", "", "webapp", "GET /c", 3, 10, "ok"),
+		sp("t3", "b", "a", "catalog-api", "GET /items", 4, 5, "ok"),
+		sp("t4", "a", "", "webapp", "GET /d", 4, 10, "ok"),
+	})
+	list, _ := s.List(0, TraceFilter{Service: "catalog-api"})
+	if got := strings.Join(traceIDs(list), ","); got != "t3,t1" {
+		t.Errorf("service filter = %s, want t3,t1", got)
+	}
+	// The limit applies to matching traces: the two newest overall (t4, t3)
+	// must not crowd out the older match.
+	list, _ = s.List(2, TraceFilter{Service: "catalog-api"})
+	if got := strings.Join(traceIDs(list), ","); got != "t3,t1" {
+		t.Errorf("limit before filter: got %s, want t3,t1", got)
+	}
+}
+
+func TestListHidesHealthTrafficExceptErrors(t *testing.T) {
+	s := NewStore(10)
+	s.SetHealthRule(func() HealthRule {
+		return HealthRule{UserAgent: "orbit-health-probe", Paths: map[string]string{"legacy": "/healthz"}}
+	})
+	s.Ingest([]Span{
+		// Probe recorded by user agent (any service, any path).
+		withAttrs(sp("ua", "a", "", "api", "GET /health", 1, 10, "ok"), "user_agent.original", "orbit-health-probe"),
+		// Service that records no user agent: matched by its configured path.
+		withAttrs(sp("path", "a", "", "legacy", "GET", 2, 10, "ok"), "http.target", "/healthz?verbose=1"),
+		// Same path on another service is not that service's health check.
+		withAttrs(sp("other", "a", "", "api", "GET", 3, 10, "ok"), "url.path", "/healthz"),
+		// A failing health endpoint stays visible.
+		withAttrs(sp("failing", "a", "", "api", "GET /health", 4, 10, "error"), "http.user_agent", "orbit-health-probe"),
+		sp("real", "a", "", "api", "GET /item/1", 5, 10, "ok"),
+	})
+
+	list, hidden := s.List(0, TraceFilter{})
+	if got := strings.Join(traceIDs(list), ","); got != "real,failing,other" {
+		t.Errorf("default list = %s, want real,failing,other", got)
+	}
+	if hidden != 2 {
+		t.Errorf("hidden = %d, want 2", hidden)
+	}
+
+	list, hidden = s.List(0, TraceFilter{IncludeHealth: true})
+	if len(list) != 5 || hidden != 0 {
+		t.Errorf("include-health: %d traces, %d hidden; want 5, 0", len(list), hidden)
+	}
+	for _, sum := range list {
+		wantHealth := sum.TraceID == "ua" || sum.TraceID == "path" || sum.TraceID == "failing"
+		if sum.Health != wantHealth {
+			t.Errorf("%s health = %v, want %v", sum.TraceID, sum.Health, wantHealth)
+		}
+	}
+
+	// Hidden counts only traces the rest of the filter would have shown.
+	if _, hidden := s.List(0, TraceFilter{Service: "legacy"}); hidden != 1 {
+		t.Errorf("hidden under service filter = %d, want 1", hidden)
+	}
+}
+
+func TestMatchSummarySearchesSummaryFieldsOnly(t *testing.T) {
+	sum := TraceSummary{TraceID: "t", RootService: "webapp", RootName: "GET /item/1", Services: []string{"webapp", "catalog-api"}, Status: "ok"}
+	cases := []struct {
+		f    TraceFilter
+		want bool
+	}{
+		{TraceFilter{}, true},
+		{TraceFilter{Search: "ITEM/1"}, true},
+		{TraceFilter{Search: "catalog"}, true},
+		{TraceFilter{Search: "select"}, false},
+		{TraceFilter{Service: "catalog-api"}, true},
+		{TraceFilter{Service: "billing"}, false},
+	}
+	for _, c := range cases {
+		if got := c.f.MatchSummary(sum); got != c.want {
+			t.Errorf("%+v.MatchSummary = %v, want %v", c.f, got, c.want)
+		}
+	}
+	health := sum
+	health.Health = true
+	if (TraceFilter{}).MatchSummary(health) {
+		t.Error("ok health summary should be hidden by default")
+	}
+	if !(TraceFilter{IncludeHealth: true}).MatchSummary(health) {
+		t.Error("include-health should keep it")
+	}
+	health.Status = "error"
+	if !(TraceFilter{}).MatchSummary(health) {
+		t.Error("errored health summary should stay visible")
+	}
 }
