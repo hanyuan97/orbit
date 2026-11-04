@@ -21,11 +21,31 @@ type portAssignments struct {
 	Ports     map[string]int `json:"ports"`
 }
 
-func ResolvePorts(cfg *config.Config) error {
+// Survivors names what this instance left running past its last daemon, so a
+// stored port it still holds is not mistaken for a port someone else took.
+// Containers outlive `orbit daemon stop` by design, and host processes outlive
+// a daemon crash until the new daemon retires them.
+type Survivors struct {
+	// Processes holds, by config.Services name, the host services whose
+	// recorded process is still alive. Every stored port of such a service
+	// counts as held, since the process may bind any of them.
+	Processes map[string]bool
+	// ContainerPorts reports the host ports this instance's running
+	// containers publish. It is called at most once, and only when a stored
+	// container port is taken, so Docker stays off the common path.
+	ContainerPorts func() (map[int]bool, error)
+}
+
+// ResolvePorts applies this instance's stored ports to cfg, keeping each one
+// while it is free or held by the instance's own survivors, and moving it to
+// a free port otherwise. defaultDashboardPort is the default runtime's
+// dashboard, which no instance resource may take.
+func ResolvePorts(cfg *config.Config, defaultDashboardPort int, survivors Survivors) error {
 	name := CurrentName()
 	if name == "" {
 		return nil
 	}
+	heldBySurvivor := survivors.holds()
 	return updatePortAssignments(name, func(assignments *portAssignments, reserved map[int]bool) error {
 		requests := configPortRequests(cfg)
 		current := map[string]bool{"dashboard": true}
@@ -39,6 +59,7 @@ func ResolvePorts(cfg *config.Config) error {
 				delete(assignments.Ports, key)
 			}
 		}
+		reserved[defaultDashboardPort] = true
 		// The dashboard is assigned before the daemon resolves service ports
 		// and is not a config request, so a relocated service could take the
 		// very port the daemon is about to bind.
@@ -51,6 +72,9 @@ func ResolvePorts(cfg *config.Config) error {
 			if assigned <= 0 || reserved[assigned] || owner[assigned] != "" {
 				continue
 			}
+			if !orbitport.Available(assigned) && !heldBySurvivor(request, assigned) {
+				continue
+			}
 			owner[assigned] = request.key
 		}
 		for port := range owner {
@@ -58,7 +82,8 @@ func ResolvePorts(cfg *config.Config) error {
 		}
 		for _, request := range requests {
 			// Reuse keeps restarts stable, unless an earlier run handed this key
-			// a port it now shares with the dashboard or another key.
+			// a port it now shares with the dashboard or another key, or
+			// something outside this instance now holds it.
 			if assigned := assignments.Ports[request.key]; assigned > 0 && owner[assigned] == request.key {
 				request.apply(assigned)
 				continue
@@ -75,14 +100,45 @@ func ResolvePorts(cfg *config.Config) error {
 	})
 }
 
-func ResolveDashboardPort(preferred int) (int, error) {
+// holds reports whether a taken port belongs to one of the survivors. A
+// failed container query counts as held: moving a port our own container
+// still publishes would replace that container, while keeping a foreign one
+// only surfaces the start-time port conflict.
+func (s Survivors) holds() func(portRequest, int) bool {
+	var (
+		queried        bool
+		containerPorts map[int]bool
+		queryErr       error
+	)
+	return func(request portRequest, port int) bool {
+		if !request.container {
+			return s.Processes[request.resource]
+		}
+		if s.ContainerPorts == nil {
+			return false
+		}
+		if !queried {
+			queried = true
+			containerPorts, queryErr = s.ContainerPorts()
+		}
+		return queryErr != nil || containerPorts[port]
+	}
+}
+
+// ResolveDashboardPort returns the instance's dashboard port. The stored port
+// is kept while it is free; a first or displaced assignment starts at
+// preferred and avoids defaultDashboardPort, the default runtime's dashboard.
+func ResolveDashboardPort(preferred int, defaultDashboardPort int) (int, error) {
 	name := CurrentName()
 	if name == "" {
 		return preferred, nil
 	}
 	assigned := preferred
 	err := updatePortAssignments(name, func(assignments *portAssignments, reserved map[int]bool) error {
-		if current := assignments.Ports["dashboard"]; current > 0 {
+		reserved[defaultDashboardPort] = true
+		// The only caller starts a daemon after EnsureDaemon found none alive,
+		// so a taken port is never held by this instance's own dashboard.
+		if current := assignments.Ports["dashboard"]; current > 0 && !reserved[current] && loopbackAvailable(current) {
 			assigned = current
 			return nil
 		}
@@ -133,13 +189,15 @@ func updatePortAssignments(name string, update func(*portAssignments, map[int]bo
 
 type portRequest struct {
 	key       string
+	resource  string
+	container bool
 	preferred int
 	apply     func(int)
 }
 
 func configPortRequests(cfg *config.Config) []portRequest {
 	requests := make([]portRequest, 0)
-	add := func(name string, ports map[string]config.PortDef, health *config.HealthCheckConfig, applicationURL *string) {
+	add := func(name string, isContainer bool, ports map[string]config.PortDef, health *config.HealthCheckConfig, applicationURL *string) {
 		labels := make([]string, 0, len(ports))
 		for label := range ports {
 			labels = append(labels, label)
@@ -149,7 +207,7 @@ func configPortRequests(cfg *config.Config) []portRequest {
 			label := label
 			original := ports[label]
 			requests = append(requests, portRequest{
-				key: name + "/" + label, preferred: original.Host,
+				key: name + "/" + label, resource: name, container: isContainer, preferred: original.Host,
 				apply: func(assigned int) {
 					updated := ports[label]
 					ports[label] = config.PortDef{Host: assigned, Target: updated.Target}
@@ -170,10 +228,10 @@ func configPortRequests(cfg *config.Config) []portRequest {
 	sort.Strings(containerNames)
 	for _, name := range containerNames {
 		container := cfg.Containers[name]
-		add(name, container.Ports, container.HealthCheck, &container.URL)
+		add(name, true, container.Ports, container.HealthCheck, &container.URL)
 		for i := range container.Sidecars {
 			sidecar := &container.Sidecars[i]
-			add(name+"/sidecar/"+sidecar.Name, sidecar.Ports, nil, nil)
+			add(name+"/sidecar/"+sidecar.Name, true, sidecar.Ports, nil, nil)
 		}
 	}
 	serviceNames := make([]string, 0, len(cfg.Services))
@@ -183,7 +241,7 @@ func configPortRequests(cfg *config.Config) []portRequest {
 	sort.Strings(serviceNames)
 	for _, name := range serviceNames {
 		service := cfg.Services[name]
-		add(name, service.Ports, service.HealthCheck, &service.URL)
+		add(name, false, service.Ports, service.HealthCheck, &service.URL)
 	}
 	return requests
 }

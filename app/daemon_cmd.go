@@ -18,6 +18,7 @@ import (
 
 	"github.com/iml885203/orbit/cli"
 	"github.com/iml885203/orbit/config"
+	"github.com/iml885203/orbit/container"
 	"github.com/iml885203/orbit/daemon"
 	"github.com/iml885203/orbit/instance"
 	daemonsrv "github.com/iml885203/orbit/internal/daemon"
@@ -468,6 +469,39 @@ func buildDaemonJSONData(opts daemonJSONOptions) daemonJSONData {
 	}
 }
 
+// instanceSurvivors names what the previous daemon of this instance left
+// running, so port resolution keeps the ports those survivors still hold. A
+// recorded process that has since died is no survivor: its port is free for
+// anyone, and keeping it for the service would only reproduce the conflict.
+func instanceSurvivors(namespace string, prevState *daemonsrv.DaemonState, prevStateErr error) instance.Survivors {
+	survivors := instance.Survivors{
+		Processes: make(map[string]bool),
+		ContainerPorts: func() (map[int]bool, error) {
+			mgr, err := container.NewManager(namespace)
+			if err != nil {
+				slog.Warn("connecting to Docker for surviving containers", "component", "daemon", "err", err)
+				return nil, err
+			}
+			defer func() { _ = mgr.Close() }()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			ports, err := mgr.PublishedPorts(ctx)
+			if err != nil {
+				slog.Warn("listing surviving containers", "component", "daemon", "err", err)
+			}
+			return ports, err
+		},
+	}
+	if prevStateErr == nil {
+		for name, record := range prevState.Processes {
+			if platform.IsProcessAlive(record.PID) {
+				survivors.Processes[name] = true
+			}
+		}
+	}
+	return survivors
+}
+
 func runDaemon(_ *cobra.Command, _ []string) error {
 	logFile, err := daemon.OpenDaemonLog()
 	if err != nil {
@@ -502,7 +536,9 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	if err := instance.ResolvePorts(cfg); err != nil {
+	stateFile := daemonsrv.NewStateFile(daemonsrv.DefaultStatePath())
+	prevState, prevStateErr := stateFile.Read()
+	if err := instance.ResolvePorts(cfg, daemon.DefaultDashboardPort, instanceSurvivors(os.Getenv("ORBIT_NAMESPACE"), prevState, prevStateErr)); err != nil {
 		return fmt.Errorf("resolving instance ports: %w", err)
 	}
 	if err := instance.WriteManifest(configFile); err != nil {
@@ -529,10 +565,7 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 	// Loads immutable snapshots from here, both writers publish through it.
 	holder := app.Holder
 
-	stateFile := daemonsrv.NewStateFile(daemonsrv.DefaultStatePath())
-
-	prevState, err := stateFile.Read()
-	if err == nil {
+	if prevStateErr == nil {
 		for name, saved := range prevState.Services {
 			app.Orchestrator.RestoreContainerRuntime(
 				name,
@@ -543,7 +576,7 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 			)
 		}
 	}
-	if err == nil && len(prevState.Processes) > 0 {
+	if prevStateErr == nil && len(prevState.Processes) > 0 {
 		procs := make(map[string]struct{ PID, PGID int })
 		for name, rec := range prevState.Processes {
 			procs[name] = struct{ PID, PGID int }{rec.PID, rec.PGID}
