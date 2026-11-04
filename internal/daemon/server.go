@@ -19,6 +19,7 @@ import (
 	"github.com/iml885203/orbit/instance"
 	"github.com/iml885203/orbit/internal/cmdmap/gaps"
 	"github.com/iml885203/orbit/internal/engine"
+	"github.com/iml885203/orbit/internal/health"
 	"github.com/iml885203/orbit/internal/history"
 	"github.com/iml885203/orbit/internal/tracing"
 )
@@ -124,7 +125,27 @@ func NewServer(app *engine.App, holder *config.Holder, stateFile *StateFile, set
 		tracing:      tracing.NewStore(cfg.TracingMaxTraces()),
 		staticFS:     ui,
 	}
+	srv.tracing.SetHealthRule(func() tracing.HealthRule { return traceHealthRule(holder.Load()) })
 	return srv
+}
+
+// traceHealthRule derives the store's health-probe rule from the current
+// config: the probe's User-Agent, plus each service's HTTP health_check.path
+// for instrumentation that does not record the user agent. Only services get
+// OTEL_SERVICE_NAME set to their resource name, so containers have no key to
+// match. An empty path probes "/", which would hide real traffic; those probes
+// are recognised by User-Agent alone.
+func traceHealthRule(cfg *config.Config) tracing.HealthRule {
+	rule := tracing.HealthRule{UserAgent: health.ProbeUserAgent, Paths: map[string]string{}}
+	if cfg == nil {
+		return rule
+	}
+	for name, svc := range cfg.Services {
+		if hc := svc.HealthCheck; hc != nil && hc.Type == "http" && hc.Path != "" {
+			rule.Paths[name] = hc.Path
+		}
+	}
+	return rule
 }
 
 func (s *Server) SetRestartLauncher(launcher func(string, string) error) {

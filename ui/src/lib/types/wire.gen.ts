@@ -281,6 +281,11 @@ export interface TraceLogLine {
   line: string;
 }
 /**
+ * HiddenHealthTracesHeader carries, on GET /api/traces, how many health-probe
+ * traces the list withheld — a header so the body stays a bare summary array.
+ */
+export const HiddenHealthTracesHeader = "X-Orbit-Hidden-Health-Traces";
+/**
  * TraceLogsResponse is the response for GET /api/traces/{id}/logs.
  */
 export interface TraceLogsResponse {

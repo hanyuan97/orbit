@@ -40,6 +40,10 @@ type TraceLogLine struct {
 	Line    string `json:"line"`
 }
 
+// HiddenHealthTracesHeader carries, on GET /api/traces, how many health-probe
+// traces the list withheld — a header so the body stays a bare summary array.
+const HiddenHealthTracesHeader = "X-Orbit-Hidden-Health-Traces"
+
 // TraceLogsResponse is the response for GET /api/traces/{id}/logs.
 type TraceLogsResponse struct {
 	Lines []TraceLogLine `json:"lines"`
