@@ -1003,6 +1003,9 @@ func runRestart(_ *cobra.Command, args []string) error {
 }
 
 func runLogs(_ *cobra.Command, args []string) error {
+	if logLines < 0 {
+		return cli.NewInvalidArgumentError(fmt.Sprintf("--lines/--tail must be zero or more, got %d", logLines))
+	}
 	if err := validateConfiguredCommandResources(configFile, args, func(_ int, suggestion string) string {
 		command := "orbit logs " + suggestion
 		if follow {

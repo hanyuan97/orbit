@@ -25,21 +25,35 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(parts) == 2 && parts[1] == "stream" {
-		s.handleLogStream(w, r, name, requestedLogLines(r, 0))
+	stream := len(parts) == 2 && parts[1] == "stream"
+	fallback := 100
+	if stream {
+		fallback = 0
+	}
+	lines, err := requestedLogLines(r, fallback)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, APIResponse{Error: err.Error()})
 		return
 	}
 
-	logLines := s.app.Logs.GetLastLines(name, requestedLogLines(r, 100))
+	if stream {
+		s.handleLogStream(w, r, name, lines)
+		return
+	}
+
+	logLines := s.app.Logs.GetLastLines(name, lines)
 	writeJSON(w, http.StatusOK, LogsResponse{Lines: logLines})
 }
 
-func requestedLogLines(r *http.Request, fallback int) int {
+func requestedLogLines(r *http.Request, fallback int) (int, error) {
 	var lines int
 	if n, err := fmt.Sscanf(r.URL.Query().Get("lines"), "%d", &lines); n == 0 || err != nil {
-		return fallback
+		return fallback, nil
 	}
-	return lines
+	if lines < 0 {
+		return 0, fmt.Errorf("lines must be zero or more, got %d", lines)
+	}
+	return lines, nil
 }
 
 func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request, name string, backlogLines int) {

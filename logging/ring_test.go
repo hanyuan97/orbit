@@ -52,3 +52,14 @@ func TestRingBuffer_Last(t *testing.T) {
 		t.Errorf("Last(100) = %d items, want 7", len(last100))
 	}
 }
+
+func TestRingBuffer_LastNonPositiveReturnsNoLines(t *testing.T) {
+	rb := NewRingBuffer(10)
+	rb.Write("line")
+
+	for _, n := range []int{0, -1} {
+		if got := rb.Last(n); len(got) != 0 {
+			t.Errorf("Last(%d) = %v, want no lines", n, got)
+		}
+	}
+}
