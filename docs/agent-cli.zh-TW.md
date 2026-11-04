@@ -296,7 +296,7 @@ orbit logs redis --json
 orbit logs redis -f --json
 ```
 
-每一行都是一個完整的 JSON 物件。Agent 應當作 NDJSON 解析，而不是一整個 JSON array。串流先以一般的 `log` event 輸出最後 `--lines`（或 `--tail`）行，預設 100 行，接著追蹤新行；backlog 與新行之間不會遺漏或重複。`--lines 0` 只串流新行。
+每一行都是一個完整的 JSON 物件。Agent 應當作 NDJSON 解析，而不是一整個 JSON array。串流先以一般的 `log` event 輸出最後 `--lines`（或 `--tail`）行，預設 100 行，接著追蹤新行；backlog 與新行之間不會遺漏或重複；讀取端落後太多時，仍可能漏掉新行。`--lines 0` 只串流新行。
 
 如果 followed log stream 在 NDJSON 輸出開始後失敗，Orbit 會輸出最後一筆 `type: "error"` 的 NDJSON event，而不是追加另一種格式的 envelope，然後以非 0 exit code 結束。
 

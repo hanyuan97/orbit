@@ -440,8 +440,8 @@ orbit logs redis -f --json
 Each emitted line is a complete JSON object. Agents should parse it as NDJSON,
 not as one JSON array. The stream starts with the last `--lines` (or `--tail`)
 lines, default 100, as ordinary `log` events, then follows new lines. No line
-is lost or repeated between the backlog and the live lines. `--lines 0`
-streams only new lines.
+is lost or repeated between the backlog and the live lines; a reader that falls
+far behind can still miss live lines. `--lines 0` streams only new lines.
 
 If a followed log stream fails after NDJSON output has begun, Orbit emits a
 final NDJSON event with `type: "error"` instead of appending an envelope in a
