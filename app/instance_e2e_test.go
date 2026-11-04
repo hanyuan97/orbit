@@ -9,7 +9,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestE2E_RelativeFileBindRecreatesFromConfigDirectory(t *testing.T) {
@@ -79,6 +81,7 @@ func TestE2E_NamedInstancesRunAndCleanIndependently(t *testing.T) {
 	assertOrdinaryDownCleansAnonymousAndPreservesNamedVolume(t, env, first)
 	assertStaleReplacementCleansAnonymousAndPreservesConfiguredStorage(t, env, first)
 	assertCleaningInstancePreservesPeer(t, env, first, peer)
+	assertCleaningStoppedInstanceNeedsNoConfig(t, env, peer)
 }
 
 func setupNamedInstanceE2E(t *testing.T) *e2eEnv {
@@ -382,6 +385,93 @@ func assertCleaningInstancePreservesPeer(t *testing.T, env *e2eEnv, cleaned stri
 	}
 	if got := dockerOutput(t, "exec", peerContainer, "redis-cli", "GET", "instance-proof"); got != "preserved" {
 		t.Fatalf("peer Redis data changed: %q", got)
+	}
+}
+
+// assertCleaningStoppedInstanceNeedsNoConfig covers an old instance whose
+// config lived in a deleted checkout: with no daemon left, clean must remove
+// its labelled volumes and home from the instance's own records, and must not
+// kill a recorded PID that now belongs to some other process.
+func assertCleaningStoppedInstanceNeedsNoConfig(t *testing.T, env *e2eEnv, peer namedInstanceSummary) {
+	t.Helper()
+	volumes := dockerOutput(t, "volume", "ls", "--quiet", "--filter", "label=orbit.namespace="+peer.Namespace)
+	if volumes == "" {
+		t.Fatal("peer instance has no labelled volumes to clean")
+	}
+	runNamedInstance(t, env, "daemon", "stop", "--instance", peer.Name, "--json")
+
+	unrelated := exec.Command("sleep", "300")
+	unrelated.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	unrelated.Dir = env.home // only the command differs from the record
+	if err := unrelated.Start(); err != nil {
+		t.Fatal(err)
+	}
+	unrelatedExited := make(chan struct{})
+	go func() { _ = unrelated.Wait(); close(unrelatedExited) }()
+	t.Cleanup(func() { _ = unrelated.Process.Kill(); <-unrelatedExited })
+	instanceHome := filepath.Join(env.home, "instances", peer.Name)
+	recordProcessInState(t, filepath.Join(instanceHome, "state.json"), "reused", map[string]any{
+		"pid": unrelated.Process.Pid, "pgid": unrelated.Process.Pid, "command": "python3 server.py", "dir": env.home,
+	})
+
+	original, err := os.ReadFile(env.envYaml)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(env.envYaml); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.WriteFile(env.envYaml, original, 0o600) })
+
+	output := env.runJSON(t, "instance", "clean", peer.Name, "--json")
+	envelope := parseE2EEnvelope(t, output)
+	var data struct {
+		Skipped []struct {
+			Service string `json:"service"`
+			PID     int    `json:"pid"`
+		} `json:"skipped_processes"`
+	}
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || len(data.Skipped) != 1 || data.Skipped[0].PID != unrelated.Process.Pid {
+		t.Fatalf("clean without config did not report the unproven pid: %s", output)
+	}
+	// Clean has returned, so any signal it sent has landed; the window only
+	// lets Wait observe an exit it caused.
+	select {
+	case <-unrelatedExited:
+		t.Fatal("clean killed an unrelated process recorded under a reused pid")
+	case <-time.After(500 * time.Millisecond):
+	}
+	if left := dockerOutput(t, "volume", "ls", "--quiet", "--filter", "label=orbit.namespace="+peer.Namespace); left != "" {
+		t.Fatalf("labelled volumes survived clean without config:\n%s", left)
+	}
+	if _, err := os.Stat(instanceHome); !os.IsNotExist(err) {
+		t.Fatalf("instance home survived clean without config: %v", err)
+	}
+}
+
+func recordProcessInState(t *testing.T, path, service string, record map[string]any) {
+	t.Helper()
+	state := map[string]any{}
+	if raw, err := os.ReadFile(path); err == nil {
+		if err := json.Unmarshal(raw, &state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	processes, _ := state["processes"].(map[string]any)
+	if processes == nil {
+		processes = map[string]any{}
+	}
+	processes[service] = record
+	state["processes"] = processes
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
