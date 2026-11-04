@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/fatih/color"
 	"github.com/iml885203/orbit/internal/tracing"
@@ -66,40 +67,93 @@ func TestRenderWaterfall(t *testing.T) {
 	}
 }
 
-func TestPrintTraceRowAlignsWithHeader(t *testing.T) {
+func TestPrintTraceRowAlignsWithHeaderAndKeepsFullRoot(t *testing.T) {
 	color.NoColor = true
 	var buf bytes.Buffer
 	printTraceHeader(&buf)
-	sum := tracing.TraceSummary{
-		TraceID:     "0a1b",
-		RootService: "worker",
-		RootName:    "GET api/customer/bet/{customerId:int}/sportsBetList-very-long-route",
-		DurationMs:  1080, SpanCount: 3,
+	const route = "GET api/customer/bet/{customerId:int}/sportsBetList-very-long-route"
+	long := tracing.TraceSummary{
+		TraceID: "0a1b", RootService: "worker", RootName: route,
+		DurationMs: 1080, SpanCount: 3,
 		Services: []string{"worker", "api", "billing", "catalog", "payments"},
 		Status:   "error",
 	}
-	printTraceRow(&buf, &sum)
+	short := tracing.TraceSummary{
+		TraceID: "0a1c", RootService: "api", RootName: "GET /x",
+		DurationMs: 5, Services: []string{"api"}, Status: "ok",
+	}
+	printTraceRow(&buf, &long)
+	printTraceRow(&buf, &short)
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("want header + row, got %d", len(lines))
+	if len(lines) != 3 {
+		t.Fatalf("want header + 2 rows, got %d", len(lines))
 	}
-	// Column contract: header and row share traceRowFmt, so the DUR column
-	// must start at the same rune offset in both lines.
-	headerDur := strings.Index(lines[0], "DUR")
-	rowDur := strings.Index(lines[1], "1.08s")
-	if headerDur < 0 || rowDur < 0 {
-		t.Fatalf("missing DUR/duration: header=%q row=%q", lines[0], lines[1])
+	// The span identity is never clipped.
+	if !strings.HasSuffix(lines[1], "worker "+route) {
+		t.Errorf("root should be printed in full: %q", lines[1])
 	}
-	// "%8s" right-aligns within the column; "DUR" is also inside that width.
-	if rowDur > headerDur+8 || rowDur < headerDur-8 {
-		t.Errorf("duration column misaligned: header DUR at %d, row value at %d", headerDur, rowDur)
+	// Services overflow is ellipsis-truncated, and the "…" / "→" multi-byte
+	// runes must not shift the ROOT column: it starts at the same rune offset
+	// on every line.
+	if !strings.Contains(lines[1], "…") || !strings.Contains(lines[1], "ERR") {
+		t.Errorf("long row: %q", lines[1])
 	}
-	// Overflowing cells are truncated with an ellipsis, never widen the column.
-	if !strings.Contains(lines[1], "…") {
-		t.Errorf("long root/services should be ellipsis-truncated: %q", lines[1])
+	rootCol := func(line, root string) int {
+		before, _, found := strings.Cut(line, root)
+		if !found {
+			t.Fatalf("%q not in %q", root, line)
+		}
+		return utf8.RuneCountInString(before)
 	}
-	if !strings.Contains(lines[1], "ERR") {
-		t.Errorf("error status missing: %q", lines[1])
+	want := rootCol(lines[0], "ROOT")
+	if got := rootCol(lines[1], "worker "+route); got != want {
+		t.Errorf("long row ROOT at rune %d, header at %d", got, want)
+	}
+	if got := rootCol(lines[2], "api GET /x"); got != want {
+		t.Errorf("short row ROOT at rune %d, header at %d", got, want)
+	}
+}
+
+func TestPrintTraceListReportsHiddenHealthTraces(t *testing.T) {
+	color.NoColor = true
+	sum := tracing.TraceSummary{TraceID: "a", RootService: "api", RootName: "GET /x", Status: "ok"}
+
+	var buf bytes.Buffer
+	printTraceList(&buf, []tracing.TraceSummary{sum}, 7)
+	if !strings.Contains(buf.String(), "7 health-probe trace(s) hidden (--include-health to show)") {
+		t.Errorf("hidden count missing:\n%s", buf.String())
+	}
+
+	buf.Reset()
+	printTraceList(&buf, nil, 3)
+	out := buf.String()
+	if strings.Contains(out, "ROOT") || !strings.Contains(out, "0 trace(s). 3 health-probe trace(s) hidden") {
+		t.Errorf("all-hidden list should say so without an empty table:\n%s", out)
+	}
+
+	buf.Reset()
+	printTraceList(&buf, []tracing.TraceSummary{sum}, 0)
+	if strings.Contains(buf.String(), "hidden") {
+		t.Errorf("nothing hidden should not mention it:\n%s", buf.String())
+	}
+}
+
+func TestRenderWaterfallKeepsLongLabelsAligned(t *testing.T) {
+	color.NoColor = true
+	tr := fixtureTrace()
+	tr.Spans[1].Service = "catalog-api"
+	tr.Spans[1].Name = "GET /api/catalog/items/1"
+	var buf bytes.Buffer
+	renderWaterfall(&buf, tr)
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if !strings.HasSuffix(lines[2], "  catalog-api GET /api/catalog/items/1") {
+		t.Errorf("label clipped: %q", lines[2])
+	}
+	// Bars start at the line start on every span row, regardless of label.
+	for _, l := range lines[1:] {
+		if !strings.HasPrefix(l, "│") {
+			t.Errorf("bar not at column 0: %q", l)
+		}
 	}
 }
 
@@ -127,6 +181,9 @@ func TestFmtMsAndTruncate(t *testing.T) {
 	}
 	if got := truncate("abcdef", 4); got != "abc…" {
 		t.Errorf("truncate = %q", got)
+	}
+	if got := truncate("a…bcd", 3); got != "a……" {
+		t.Errorf("truncate counts runes: %q", got)
 	}
 	if got := truncate("abc", 4); got != "abc" {
 		t.Errorf("truncate short = %q", got)

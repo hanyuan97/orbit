@@ -248,7 +248,7 @@ These commands currently use the `orbit.cli.v1` envelope when `--json` is set:
 | `orbit status --json` | Returns setup/selection readiness, the selected and available environments, managed repository URL/ref/commit when applicable, daemon and release-update state, and configured resource state in `data.resources`. Read-only status remains available during an update transaction. |
 | `orbit env info --json` | Returns the env's identity and, per resource, ports and URL with provenance: `declared` comes from the environment file, `observed` from the running daemon. Observed values are withheld when the daemon serves a different environment (`data.daemon.config_match: false`). Resource environment values appear only with `--show-secrets`; key names are always listed. |
 | `orbit logs <resource> --json` | Returns recent log lines in one JSON object. |
-| `orbit logs <resource> -f --json` | Streams NDJSON events, one JSON object per line. |
+| `orbit logs <resource> -f --json` | Streams NDJSON events, one JSON object per line, starting with the last `--lines` lines (default 100). |
 | `orbit up --json` | Returns the resources actually selected by the daemon (including dependencies and group filtering), observed final states, degraded/timed-out resources, and recommended follow-up commands. When it applies pending config edits, `data.environment_changes` reports running intent preserved across the handoff. An environment with no enabled resources succeeds immediately with empty arrays. |
 | `orbit down --json` | Returns final lifecycle result after stopping resources. It is a successful no-op with empty arrays when Orbit is already stopped. Before setup it recommends `orbit init`; after setup it recommends the next normal `orbit up`. |
 | `orbit down <resources...> --json` | Returns the final lifecycle result for the requested resources. If that stop degrades running dependents, they are included in `resources` and `degraded_resources` with the one dependency-restoration action. `--group` and `--infra` use the same mutually exclusive selection modes as `orbit up`; group shutdown stops members without stopping shared dependencies. |
@@ -272,8 +272,8 @@ These commands currently use the `orbit.cli.v1` envelope when `--json` is set:
 | `orbit init --json` | Returns the setup result in the envelope, with failures carrying the incomplete step. |
 | `orbit tunnel list --json` | Returns active claims in `data.claims` (paths, owner, target, status); `--all` includes other owners' claims with `mine` flags. |
 | `orbit tunnel release --json` | Returns the released count, paths or local port, and gateway in the envelope. |
-| `orbit trace --json` | Returns recent trace summaries in `data.traces`, newest first. |
-| `orbit trace -f --json` | Streams NDJSON trace-summary events, one JSON object per line. |
+| `orbit trace --json` | Returns recent trace summaries in `data.traces`, newest first; `--search` and `--service` narrow the list before `--limit`, and `--include-health` adds Orbit's own health-probe traces. |
+| `orbit trace -f --json` | Streams NDJSON trace-summary events, one JSON object per line; `--service`, `--include-health` and a summary-only `--search` apply to each event. |
 | `orbit trace <id> --json` | Returns one full trace (summary fields + `spans`) in `data`. |
 | `orbit tracing status --json` | Returns the receiver's health, the port in use, and ingest counters in `data`. |
 
@@ -461,7 +461,10 @@ orbit logs redis -f --json
 ```
 
 Each emitted line is a complete JSON object. Agents should parse it as NDJSON,
-not as one JSON array.
+not as one JSON array. The stream starts with the last `--lines` (or `--tail`)
+lines, default 100, as ordinary `log` events, then follows new lines. No line
+is lost or repeated between the backlog and the live lines; a reader that falls
+far behind can still miss live lines. `--lines 0` streams only new lines.
 
 If a followed log stream fails after NDJSON output has begun, Orbit emits a
 final NDJSON event with `type: "error"` instead of appending an envelope in a
@@ -475,13 +478,23 @@ state with `orbit tracing status --json`.
 
 ```bash
 orbit trace --json             # recent traces; --limit N caps the count
+orbit trace --search item/1 --json   # traces whose span names or attribute values contain the text
+orbit trace --service api --json     # traces that include that service
 orbit trace <trace-id> --json  # one full trace with its span tree
 orbit trace -f --json          # NDJSON stream of trace-summary updates
 ```
 
+Traces of Orbit's own health probes are hidden unless they errored (see
+[tracing.md](tracing.md#health-probe-traffic)); `--include-health` shows them.
+`data.hiddenHealthTraces` says how many matching traces were hidden.
+Under `-f`, `--search` sees only `rootService`, `rootName` and `services`,
+because summaries carry no spans, and a summary emitted before its root span
+arrives is not yet recognised as health traffic.
+
 A trace summary carries `traceId`, `rootService`, `rootName`, `startUnixNano`,
-`durationMs`, `spanCount`, `services` (distinct, first-seen order), and
-`status` (`ok` | `error`). The full trace adds `spans`, each with
+`durationMs`, `spanCount`, `services` (distinct, first-seen order),
+`status` (`ok` | `error`), and `health: true` on health-probe traffic (omitted
+otherwise). The full trace adds `spans`, each with
 `traceId`/`spanId`/`parentId`, `service`, `name`, `kind`, `startUnixNano`/
 `endUnixNano`/`durationMs`, `status`/`statusMsg`, and `attributes`. These key
 names are pinned by contract tests (`app/traces_json_test.go`) — treat
@@ -490,7 +503,8 @@ renames as breaking.
 In `-f --json` mode the same `traceId` may be emitted repeatedly as its trace
 accumulates spans; the latest event supersedes earlier ones.
 
-A typical agent workflow: `orbit trace --json` → pick the errored trace →
+A typical agent workflow: `orbit trace --search <path or text> --json` (or
+`orbit trace --json` → pick the errored trace) →
 `orbit trace <id> --json` to find the failing span → the trace's log lines via
 `GET /api/traces/{id}/logs` on the daemon, or `orbit trace <id> --logs` for
 human-readable output.

@@ -281,10 +281,10 @@ func (c *Client) Logs(name string, lines int) (*LogsResponse, error) {
 	return &result, nil
 }
 
-// StreamLogs opens an SSE connection and calls fn for each line.
-// Blocks until the context is cancelled or connection drops.
-func (c *Client) StreamLogs(name string, fn func(line string)) error {
-	url := fmt.Sprintf("http://orbit/api/logs/%s/stream", name)
+// StreamLogs opens an SSE connection and calls fn for the last backlogLines
+// buffered lines, then for each new line, until the connection drops.
+func (c *Client) StreamLogs(name string, backlogLines int, fn func(line string)) error {
+	url := fmt.Sprintf("http://orbit/api/logs/%s/stream?lines=%d", name, backlogLines)
 	resp, err := c.get(url)
 	if err != nil {
 		return fmt.Errorf("stream request failed: %w", err)

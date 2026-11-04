@@ -594,3 +594,38 @@ func startH2CServer(t *testing.T, handler http.Handler) int {
 	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
 	return listener.Addr().(*net.TCPAddr).Port
 }
+
+func TestHTTPProbeSendsOrbitUserAgent(t *testing.T) {
+	var got atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.Store(r.UserAgent())
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	hc := &config.HealthCheckConfig{Type: "http", Port: portFromURL(t, srv.URL), Path: "/health"}
+	session := NewChecker(nil, nil).NewProbeSession(context.Background(), "api", 1, hc)
+
+	if result := session.Check(); !result.Healthy {
+		t.Fatalf("probe failed: %s", result.Message)
+	}
+	if ua, _ := got.Load().(string); ua != ProbeUserAgent {
+		t.Errorf("User-Agent = %q, want %q so traces of the probe are identifiable", ua, ProbeUserAgent)
+	}
+}
+
+func TestH2CProbeSendsOrbitUserAgent(t *testing.T) {
+	var got atomic.Value
+	port := startH2CServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.Store(r.UserAgent())
+		w.WriteHeader(http.StatusOK)
+	}))
+	hc := &config.HealthCheckConfig{Type: "http", Port: port, Path: "/health"}
+	session := NewChecker(nil, nil).NewProbeSession(context.Background(), "api", 1, hc)
+
+	if result := session.Check(); !result.Healthy {
+		t.Fatalf("probe failed: %s", result.Message)
+	}
+	if ua, _ := got.Load().(string); ua != ProbeUserAgent {
+		t.Errorf("h2c User-Agent = %q, want %q", ua, ProbeUserAgent)
+	}
+}

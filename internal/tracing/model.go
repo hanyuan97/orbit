@@ -35,6 +35,10 @@ type TraceSummary struct {
 	SpanCount     int      `json:"spanCount"`
 	Services      []string `json:"services"` // distinct service names, first-seen order
 	Status        string   `json:"status"`   // ok | error
+	// Health marks Orbit's own health-probe traffic: the root span carries the
+	// probe's User-Agent, or its route/path equals the resource's configured
+	// health_check.path. Omitted when false.
+	Health bool `json:"health,omitempty"`
 }
 
 // Trace is a full trace: the summary fields plus every span, sorted by start
@@ -50,6 +54,7 @@ type Trace struct {
 	SpanCount     int      `json:"spanCount"`
 	Services      []string `json:"services"`
 	Status        string   `json:"status"`
+	Health        bool     `json:"health,omitempty"`
 	Spans         []Span   `json:"spans"`
 }
 

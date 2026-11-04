@@ -3,12 +3,16 @@ package app
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/iml885203/orbit/cli"
 	"github.com/iml885203/orbit/daemon"
@@ -20,16 +24,19 @@ var (
 	traceShowLogs bool
 	traceLimit    int
 	tracesFollow  bool
+	traceFilter   tracing.TraceFilter
 )
 
-// Trace table column widths — shared by the header and every row, and by the
-// truncate() calls that keep cell content within them.
+// Trace table column widths. ROOT is the last column and never clipped — it is
+// the span identity a reader is scanning for, and piped output has no terminal
+// width to fit it to. Widths count runes, not bytes, so a "…" or a colored
+// status does not shift the columns after it.
 const (
-	traceColRoot     = 34
+	traceColTime     = 8
+	traceColDur      = 7
+	traceColStatus   = 3
 	traceColServices = 26
 )
-
-var traceRowFmt = fmt.Sprintf("%%-9s %%-%ds %%8s  %%-%ds %%s\n", traceColRoot, traceColServices)
 
 // tracingCmd groups tracing meta-operations. Deliberately just `status`: with
 // tracing on by default there is no enable/disable action to run — turning it
@@ -71,8 +78,15 @@ func traceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "trace [trace-id]",
 		Short: "List traces, or show one trace by ID",
-		Long:  "List recent local traces. Pass a trace ID to show its waterfall.",
-		Args:  cobra.MaximumNArgs(1),
+		Long: `List recent local traces. Pass a trace ID to show its waterfall.
+
+Traces of Orbit's own health probes are hidden unless they errored; pass
+--include-health to show them. --search matches every span's service, name
+and attribute values. With -f, filters apply to each
+streamed summary, and --search sees only the root service, root name and
+services (summaries carry no spans), and a trace whose root span has not
+arrived yet is not recognised as health traffic.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				return runTraceShow(cmd, args)
@@ -85,6 +99,9 @@ func traceCmd() *cobra.Command {
 	// dashboard (200) serve different surfaces.
 	cmd.Flags().IntVar(&traceLimit, "limit", 50, "max number of traces to show")
 	cmd.Flags().BoolVarP(&tracesFollow, "follow", "f", false, "stream new traces as they arrive")
+	cmd.Flags().StringVar(&traceFilter.Search, "search", "", "case-insensitive text in a span name or attribute value (with -f: root and services only)")
+	cmd.Flags().StringVar(&traceFilter.Service, "service", "", "only traces that include this service")
+	cmd.Flags().BoolVar(&traceFilter.IncludeHealth, "include-health", false, "also show traces of Orbit's health probes")
 	return cmd
 }
 
@@ -98,27 +115,43 @@ func runTracesList(_ *cobra.Command, _ []string) error {
 		return runTracesFollow(client)
 	}
 
-	traces, err := listTraces(client, traceLimit)
+	traces, hidden, err := listTraces(client, traceLimit, traceFilter)
 	if err != nil {
 		return fmt.Errorf("traces failed: %w", err)
 	}
 
 	if cli.JSONOutput {
-		return cli.WriteJSONSuccess(os.Stdout, commandString(), map[string]any{"traces": traces}, nil)
+		return cli.WriteJSONSuccess(os.Stdout, commandString(), map[string]any{"traces": traces, "hiddenHealthTraces": hidden}, nil)
 	}
 
-	if len(traces) == 0 {
+	if len(traces) == 0 && hidden == 0 && traceFilter == (tracing.TraceFilter{}) {
 		st, _ := tracingStatus(client)
 		printNoTraces(os.Stdout, st)
 		return nil
 	}
 
-	printTraceHeader(os.Stdout)
-	for i := range traces {
-		printTraceRow(os.Stdout, &traces[i])
-	}
-	cli.Faint.Printf("\n%d trace(s). Inspect one with: orbit trace <id>\n", len(traces))
+	printTraceList(os.Stdout, traces, hidden)
 	return nil
+}
+
+// printTraceList renders the human trace table and its footer, which says how
+// many health-probe traces the list withheld so their absence is never silent.
+func printTraceList(w io.Writer, traces []tracing.TraceSummary, hiddenHealth int) {
+	if len(traces) > 0 {
+		printTraceHeader(w)
+		for i := range traces {
+			printTraceRow(w, &traces[i])
+		}
+		fmt.Fprintln(w)
+	}
+	footer := fmt.Sprintf("%d trace(s).", len(traces))
+	if hiddenHealth > 0 {
+		footer += fmt.Sprintf(" %d health-probe trace(s) hidden (--include-health to show).", hiddenHealth)
+	}
+	if len(traces) > 0 {
+		footer += " Inspect one with: orbit trace <id>"
+	}
+	fmt.Fprintln(w, cli.Faint.Sprint(footer))
 }
 
 // runTracesFollow streams new trace updates live off the SSE 'trace' event.
@@ -127,7 +160,11 @@ func runTracesList(_ *cobra.Command, _ []string) error {
 func runTracesFollow(client *daemon.Client) error {
 	if cli.JSONOutput {
 		enc := json.NewEncoder(os.Stdout)
-		return streamTraces(client, func(t tracing.TraceSummary) { _ = enc.Encode(t) })
+		return streamTraces(client, func(t tracing.TraceSummary) {
+			if traceFilter.MatchSummary(t) {
+				_ = enc.Encode(t)
+			}
+		})
 	}
 	// Follow blocks silently on an idle stream, so a user who runs it while
 	// tracing is off (or the receiver never bound) would just hang. Surface
@@ -138,7 +175,11 @@ func runTracesFollow(client *daemon.Client) error {
 	}
 	fmt.Fprintln(os.Stderr, "Streaming traces (Ctrl+C to stop)…")
 	printTraceHeader(os.Stdout)
-	return streamTraces(client, func(t tracing.TraceSummary) { printTraceRow(os.Stdout, &t) })
+	return streamTraces(client, func(t tracing.TraceSummary) {
+		if traceFilter.MatchSummary(t) {
+			printTraceRow(os.Stdout, &t)
+		}
+	})
 }
 
 // The trace client calls live here rather than on the public
@@ -152,27 +193,52 @@ func runTracesFollow(client *daemon.Client) error {
 // straight through the daemon error contract, and decode errors say
 // "decoding <what>".
 func getJSON(c *daemon.Client, path, what string, out any) error {
+	_, err := getJSONWithHeader(c, path, what, out)
+	return err
+}
+
+// getJSONWithHeader is getJSON for callers that also read response headers.
+func getJSONWithHeader(c *daemon.Client, path, what string, out any) (http.Header, error) {
 	resp, err := c.Get(path)
 	if err != nil {
-		return fmt.Errorf("%s request failed: %w", what, err)
+		return nil, fmt.Errorf("%s request failed: %w", what, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return daemon.ReadAPIError(resp)
+		return nil, daemon.ReadAPIError(resp)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decoding %s: %w", what, err)
+		return nil, fmt.Errorf("decoding %s: %w", what, err)
 	}
-	return nil
+	return resp.Header, nil
 }
 
-// listTraces returns trace summaries newest-first, capped at limit (0 = all).
-func listTraces(c *daemon.Client, limit int) ([]tracing.TraceSummary, error) {
-	var out []tracing.TraceSummary
-	if err := getJSON(c, fmt.Sprintf("/api/traces?limit=%d", limit), "traces", &out); err != nil {
-		return nil, err
+// listTraces returns the trace summaries that pass f, newest-first, capped at
+// limit (0 = all), plus the number of health-probe traces the daemon withheld.
+func listTraces(c *daemon.Client, limit int, f tracing.TraceFilter) ([]tracing.TraceSummary, int, error) {
+	q := url.Values{"limit": {strconv.Itoa(limit)}}
+	if f.Search != "" {
+		q.Set("search", f.Search)
 	}
-	return out, nil
+	if f.Service != "" {
+		q.Set("service", f.Service)
+	}
+	if f.IncludeHealth {
+		q.Set("include_health", "true")
+	}
+	var out []tracing.TraceSummary
+	h, err := getJSONWithHeader(c, "/api/traces?"+q.Encode(), "traces", &out)
+	if err != nil {
+		return nil, 0, err
+	}
+	// A daemon that predates trace filtering sends no header and ignores the
+	// query, so its list would pass for a filtered one.
+	count := h.Get(daemon.HiddenHealthTracesHeader)
+	if count == "" && f != (tracing.TraceFilter{}) {
+		return nil, 0, errors.New("the running daemon does not support trace filters; restart it with 'orbit down && orbit up'")
+	}
+	hidden, _ := strconv.Atoi(count)
+	return out, hidden, nil
 }
 
 // getTrace returns one full trace by id. Errors when the trace is
@@ -228,18 +294,25 @@ func streamTraces(c *daemon.Client, fn func(tracing.TraceSummary)) error {
 }
 
 func printTraceHeader(w io.Writer) {
-	fmt.Fprintf(w, traceRowFmt, "TIME", "ROOT", "DUR", "SERVICES", "ST")
+	printTraceCells(w, "TIME", "DUR", "ST", "SERVICES", "ROOT")
 }
 
 func printTraceRow(w io.Writer, t *tracing.TraceSummary) {
-	root := truncate(strings.TrimSpace(t.RootService+" "+t.RootName), traceColRoot)
-	svcs := truncate(strings.Join(t.Services, "→"), traceColServices)
-	st := cli.Green.Sprint("ok")
+	st := cli.Green.Sprint(padRight("ok", traceColStatus))
 	if t.Status == "error" {
-		st = cli.Red.Sprint("ERR")
+		st = cli.Red.Sprint(padRight("ERR", traceColStatus))
 	}
-	fmt.Fprintf(w, traceRowFmt,
-		tsClock(t.StartUnixNano), root, fmtMs(t.DurationMs), svcs, st)
+	printTraceCells(w, tsClock(t.StartUnixNano), fmtMs(t.DurationMs), st,
+		truncate(strings.Join(t.Services, "→"), traceColServices),
+		strings.TrimSpace(t.RootService+" "+t.RootName))
+}
+
+// printTraceCells lays out one table line. A colored status cell must arrive
+// padded before coloring: its escape codes would otherwise count as width.
+func printTraceCells(w io.Writer, clock, dur, status, services, root string) {
+	fmt.Fprintf(w, "%s  %s  %s  %s  %s\n",
+		padRight(clock, traceColTime), padLeft(dur, traceColDur),
+		padRight(status, traceColStatus), padRight(services, traceColServices), root)
 }
 
 // printNoTraces explains an empty trace list in terms of the receiver's real
@@ -327,8 +400,9 @@ func renderWaterfall(w io.Writer, t *tracing.Trace) {
 	}
 	for i := range t.Spans {
 		sp := &t.Spans[i]
-		indent := strings.Repeat("  ", depth[sp.SpanID])
-		label := truncate(indent+spanLabel(sp), 30)
+		// The label follows the fixed-width bar and duration, so it is never
+		// clipped and never shifts the columns.
+		label := strings.Repeat("  ", depth[sp.SpanID]) + spanLabel(sp)
 
 		startMs := float64(sp.StartUnixNano-t.StartUnixNano) / 1e6
 		offset := int(startMs / total * barWidth)
@@ -343,11 +417,11 @@ func renderWaterfall(w io.Writer, t *tracing.Trace) {
 		bar := strings.Repeat(" ", offset) + strings.Repeat("█", length)
 		bar += strings.Repeat(" ", barWidth-offset-length)
 
-		dur := fmtMs(sp.DurationMs)
+		dur := padLeft(fmtMs(sp.DurationMs), traceColDur)
 		if sp.Status == "error" {
-			fmt.Fprintf(w, "%-30s │%s│ %s %s\n", label, cli.Red.Sprint(bar), dur, cli.Red.Sprint("✗"))
+			fmt.Fprintf(w, "│%s│ %s %s %s\n", cli.Red.Sprint(bar), dur, cli.Red.Sprint("✗"), label)
 		} else {
-			fmt.Fprintf(w, "%-30s │%s│ %s\n", label, bar, dur)
+			fmt.Fprintf(w, "│%s│ %s   %s\n", bar, dur, label)
 		}
 	}
 }
@@ -422,14 +496,26 @@ func fmtMs(ms float64) string {
 	return fmt.Sprintf("%.2fs", ms/1000)
 }
 
+// truncate clips s to n runes, marking the cut with "…".
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	r := []rune(s)
+	if len(r) <= n {
 		return s
 	}
 	if n <= 1 {
-		return s[:n]
+		return string(r[:n])
 	}
-	return s[:n-1] + "…"
+	return string(r[:n-1]) + "…"
+}
+
+// padRight and padLeft pad to n runes; fmt's %-Ns counts bytes, which
+// misaligns any cell holding a multi-byte rune such as "…" or "→".
+func padRight(s string, n int) string {
+	return s + strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s)))
+}
+
+func padLeft(s string, n int) string {
+	return strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s))) + s
 }
 
 func clamp(v, lo, hi int) int {

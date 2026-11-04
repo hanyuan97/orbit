@@ -317,7 +317,7 @@ orbit logs redis --json
 orbit logs redis -f --json
 ```
 
-每一行都是一個完整的 JSON 物件。Agent 應當作 NDJSON 解析，而不是一整個 JSON array。
+每一行都是一個完整的 JSON 物件。Agent 應當作 NDJSON 解析，而不是一整個 JSON array。串流先以一般的 `log` event 輸出最後 `--lines`（或 `--tail`）行，預設 100 行，接著追蹤新行；backlog 與新行之間不會遺漏或重複；讀取端落後太多時，仍可能漏掉新行。`--lines 0` 只串流新行。
 
 如果 followed log stream 在 NDJSON 輸出開始後失敗，Orbit 會輸出最後一筆 `type: "error"` 的 NDJSON event，而不是追加另一種格式的 envelope，然後以非 0 exit code 結束。
 
@@ -329,13 +329,21 @@ receiver 的即時狀態。
 
 ```bash
 orbit trace --json             # 近期 trace；--limit N 控制筆數
+orbit trace --search item/1 --json   # span 名稱或 attribute 值含該文字的 trace
+orbit trace --service api --json     # 經過該 service 的 trace
 orbit trace <trace-id> --json  # 一條完整 trace 與其 span tree
 orbit trace -f --json          # NDJSON 串流 trace-summary 更新
 ```
 
+Orbit 自己 health probe 的 trace 預設隱藏（除非出錯，見
+[tracing.zh-TW.md](tracing.zh-TW.md#health-probe-流量)）；`--include-health`
+會顯示它們。`data.hiddenHealthTraces` 是被隱藏的相符 trace 數。`-f` 模式下 `--search` 只比對 `rootService`、`rootName` 與
+`services`，因為 summary 不帶 span；root span 尚未抵達前發出的 summary 也還
+認不出是 health 流量。
+
 trace summary 帶有 `traceId`、`rootService`、`rootName`、`startUnixNano`、
-`durationMs`、`spanCount`、`services`（去重、首見順序）與 `status`
-（`ok` | `error`）。完整 trace 多了 `spans`，每個 span 有
+`durationMs`、`spanCount`、`services`（去重、首見順序）、`status`
+（`ok` | `error`），health-probe 流量另帶 `health: true`（否則省略）。完整 trace 多了 `spans`，每個 span 有
 `traceId`/`spanId`/`parentId`、`service`、`name`、`kind`、
 `startUnixNano`/`endUnixNano`/`durationMs`、`status`/`statusMsg` 與
 `attributes`。這些欄位名由 contract test（`app/traces_json_test.go`）
@@ -344,7 +352,8 @@ trace summary 帶有 `traceId`、`rootService`、`rootName`、`startUnixNano`、
 `-f --json` 模式下，同一個 `traceId` 會隨 span 累積而重複發出；後到的
 event 取代先前的。
 
-典型 agent 工作流：`orbit trace --json` → 挑出 errored trace →
+典型 agent 工作流：`orbit trace --search <路徑或文字> --json`（或
+`orbit trace --json` → 挑出 errored trace）→
 `orbit trace <id> --json` 找失敗的 span → 該 trace 的 log 行走 daemon 的
 `GET /api/traces/{id}/logs`，或人類可讀輸出用 `orbit trace <id> --logs`。
 

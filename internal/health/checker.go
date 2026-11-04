@@ -139,6 +139,11 @@ func (s *ProbeSession) Check() Result {
 	}
 }
 
+// ProbeUserAgent is the User-Agent of Orbit's HTTP health probe. It is
+// distinctive so instrumented services' traces of the probe can be told apart
+// from real traffic (the trace list hides them by default).
+const ProbeUserAgent = "orbit-health-probe"
+
 func (s *ProbeSession) checkHTTP(ctx context.Context, hc *config.HealthCheckConfig, start time.Time) Result {
 	scheme := hc.Scheme
 	if scheme == "" {
@@ -159,6 +164,7 @@ func (s *ProbeSession) checkHTTP(ctx context.Context, hc *config.HealthCheckConf
 	if err != nil {
 		return Result{Service: s.name, Healthy: false, Message: err.Error(), Latency: time.Since(start)}
 	}
+	req.Header.Set("User-Agent", ProbeUserAgent)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

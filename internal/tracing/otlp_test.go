@@ -68,7 +68,7 @@ func TestOTLPReceiverEndToEnd(t *testing.T) {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
 
-	list := store.List(0)
+	list, _ := store.List(0, TraceFilter{})
 	if len(list) != 1 {
 		t.Fatalf("want 1 trace, got %d", len(list))
 	}

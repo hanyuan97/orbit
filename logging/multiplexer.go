@@ -23,10 +23,31 @@ func NewMultiplexer() *Multiplexer {
 // Returns an unsubscribe function that removes the callback.
 func (m *Multiplexer) Subscribe(fn func(service string, line string)) func() {
 	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.subscribeLocked(fn)
+}
+
+// Follow returns the last n buffered lines of service and subscribes fn to
+// every line the service writes after them. Both happen under m.mu, which
+// Write also holds while it appends and snapshots subscribers, so each line
+// lands in exactly one of backlog or fn: none lost, none repeated.
+func (m *Multiplexer) Follow(service string, n int, fn func(line string)) (backlog []string, unsubscribe func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if buf := m.buffers[service]; buf != nil && n > 0 {
+		backlog = buf.Last(n)
+	}
+	return backlog, m.subscribeLocked(func(svc, line string) {
+		if svc == service {
+			fn(line)
+		}
+	})
+}
+
+func (m *Multiplexer) subscribeLocked(fn func(service string, line string)) func() {
 	id := m.nextID
 	m.nextID++
 	m.subscribers[id] = fn
-	m.mu.Unlock()
 	return func() {
 		m.mu.Lock()
 		delete(m.subscribers, id)
@@ -57,13 +78,14 @@ func (m *Multiplexer) Write(service string, line string) {
 		buf = NewRingBuffer(defaultBufferSize)
 		m.buffers[service] = buf
 	}
+	// Appending inside m.mu is what makes Follow gap- and duplicate-free.
+	buf.Write(line)
 	subs := make([]func(string, string), 0, len(m.subscribers))
 	for _, fn := range m.subscribers {
 		subs = append(subs, fn)
 	}
 	m.mu.Unlock()
 
-	buf.Write(line)
 	for _, fn := range subs {
 		fn(service, line)
 	}

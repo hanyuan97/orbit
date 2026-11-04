@@ -25,40 +25,46 @@ func (s *Server) handleLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check for SSE stream
 	if len(parts) == 2 && parts[1] == "stream" {
-		s.handleLogStream(w, r, name)
+		s.handleLogStream(w, r, name, requestedLogLines(r, 0))
 		return
 	}
 
-	// Return last N lines
-	lines := 100
-	if q := r.URL.Query().Get("lines"); q != "" {
-		if n, err := fmt.Sscanf(q, "%d", &lines); n == 0 || err != nil {
-			lines = 100
-		}
-	}
-
-	logLines := s.app.Logs.GetLastLines(name, lines)
+	logLines := s.app.Logs.GetLastLines(name, requestedLogLines(r, 100))
 	writeJSON(w, http.StatusOK, LogsResponse{Lines: logLines})
 }
 
-func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request, name string) {
+func requestedLogLines(r *http.Request, fallback int) int {
+	var lines int
+	if n, err := fmt.Sscanf(r.URL.Query().Get("lines"), "%d", &lines); n == 0 || err != nil {
+		return fallback
+	}
+	return lines
+}
+
+func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request, name string, backlogLines int) {
 	sse, err := openSSE(w)
 	if err != nil {
 		return
 	}
 
 	ch := make(chan string, 256)
-	unsub := s.app.Logs.Subscribe(func(svc string, line string) {
-		if svc == name {
-			select {
-			case ch <- line:
-			default:
-			}
+	backlog, unsub := s.app.Logs.Follow(name, backlogLines, func(line string) {
+		select {
+		case ch <- line:
+		default:
 		}
 	})
 	defer unsub()
+
+	// The backlog bypasses ch: it can hold the whole ring buffer, which
+	// would overflow ch and be dropped.
+	for _, line := range backlog {
+		if err := sse.Send([]byte(line)); err != nil {
+			slog.Error("sse write error", "component", "logs", "service", name, "err", err)
+			return
+		}
+	}
 
 	ctx := r.Context()
 	for {

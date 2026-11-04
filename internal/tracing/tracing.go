@@ -2,6 +2,7 @@ package tracing
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,6 +36,11 @@ type Store struct {
 	receiverHealthy bool
 	receiverPort    int    // port actually bound; 0 when unhealthy
 	receiverErr     string // bind failure reason, when any
+
+	// healthRule yields the current health-probe rule (see SetHealthRule).
+	// A func rather than a value because the daemon's config can change
+	// underneath the store; nil means no trace counts as health traffic.
+	healthRule func() HealthRule
 }
 
 type traceAccum struct {
@@ -81,6 +87,7 @@ func (s *Store) Ingest(spans []Span) {
 	}
 	now := time.Now()
 
+	rule := s.currentHealthRule()
 	s.mu.Lock()
 	touched := make(map[string]struct{})
 	accepted := 0
@@ -120,7 +127,7 @@ func (s *Store) Ingest(spans []Span) {
 	summaries := make([]TraceSummary, 0, len(touched))
 	for id := range touched {
 		if acc, ok := s.byID[id]; ok {
-			summaries = append(summaries, summarize(id, acc))
+			summaries = append(summaries, summarize(id, acc, rule))
 		}
 	}
 	s.mu.Unlock()
@@ -165,23 +172,61 @@ func (s *Store) evictLocked() {
 	}
 }
 
-// List returns up to limit trace summaries, newest first. limit <= 0 returns all.
-func (s *Store) List(limit int) []TraceSummary {
+// SetHealthRule installs the provider of the rule that marks a trace as
+// Orbit's own health-probe traffic (TraceSummary.Health). The daemon calls it
+// once at construction; the provider is consulted on every ingest and query,
+// so it may read config that changes later.
+func (s *Store) SetHealthRule(rule func() HealthRule) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.healthRule = rule
+}
+
+// currentHealthRule returns the rule in force. The provider runs outside mu,
+// so whatever it reads cannot contend with — or call back into — the store.
+// Caller must not hold mu.
+func (s *Store) currentHealthRule() HealthRule {
+	s.mu.RLock()
+	provider := s.healthRule
+	s.mu.RUnlock()
+	if provider == nil {
+		return HealthRule{}
+	}
+	return provider()
+}
+
+// List returns up to limit trace summaries that pass f, newest first, plus how
+// many otherwise-matching traces were withheld as health traffic. Filtering
+// happens before the limit, under the lock, because summaries carry no spans
+// for a caller to search. limit <= 0 returns all.
+func (s *Store) List(limit int, f TraceFilter) (traces []TraceSummary, hiddenHealth int) {
+	rule := s.currentHealthRule()
+	needle := strings.ToLower(f.Search)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]TraceSummary, 0, len(s.order))
 	for _, id := range s.order {
-		out = append(out, summarize(id, s.byID[id]))
+		acc := s.byID[id]
+		sum := summarize(id, acc, rule)
+		if !f.hasService(&sum) || (needle != "" && !matchesSpans(acc.spans, needle)) {
+			continue
+		}
+		if f.hidesHealth(&sum) {
+			hiddenHealth++
+			continue
+		}
+		out = append(out, sum)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].StartUnixNano > out[j].StartUnixNano })
 	if limit > 0 && len(out) > limit {
 		out = out[:limit]
 	}
-	return out
+	return out, hiddenHealth
 }
 
 // Get returns the full trace for id, or ok=false if it is unknown or evicted.
 func (s *Store) Get(id string) (Trace, bool) {
+	rule := s.currentHealthRule()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	acc, ok := s.byID[id]
@@ -189,7 +234,7 @@ func (s *Store) Get(id string) (Trace, bool) {
 		return Trace{}, false
 	}
 	spans := sortedSpans(acc)
-	sum := summarizeSorted(id, acc, spans)
+	sum := summarizeSorted(id, acc, spans, rule)
 	return Trace{
 		TraceID:       sum.TraceID,
 		RootService:   sum.RootService,
@@ -199,6 +244,7 @@ func (s *Store) Get(id string) (Trace, bool) {
 		SpanCount:     sum.SpanCount,
 		Services:      sum.Services,
 		Status:        sum.Status,
+		Health:        sum.Health,
 		Spans:         spans,
 	}, true
 }
@@ -298,14 +344,15 @@ func (s *Store) broadcast(sums []TraceSummary) {
 // summarize derives a TraceSummary from accumulated spans. Spans are walked in
 // start-time order so Services (first-seen) and the root (earliest parentless
 // span) are deterministic regardless of map iteration order. start/duration
-// span the full set; status is error if any span errored.
-func summarize(id string, acc *traceAccum) TraceSummary {
-	return summarizeSorted(id, acc, sortedSpans(acc))
+// span the full set; status is error if any span errored; health is the
+// rule's verdict on the root span.
+func summarize(id string, acc *traceAccum, rule HealthRule) TraceSummary {
+	return summarizeSorted(id, acc, sortedSpans(acc), rule)
 }
 
 // summarizeSorted is summarize for callers that already hold the sorted span
 // slice (Get builds it for Trace.Spans anyway — no second sort).
-func summarizeSorted(id string, acc *traceAccum, spans []Span) TraceSummary {
+func summarizeSorted(id string, acc *traceAccum, spans []Span, rule HealthRule) TraceSummary {
 	sum := TraceSummary{TraceID: id, SpanCount: len(acc.spans), Status: "ok"}
 	if len(spans) == 0 {
 		return sum
@@ -336,6 +383,7 @@ func summarizeSorted(id string, acc *traceAccum, spans []Span) TraceSummary {
 			haveRoot = true
 			sum.RootService = sp.Service
 			sum.RootName = sp.Name
+			sum.Health = rule.matches(sp)
 		}
 	}
 	sum.StartUnixNano = minStart
