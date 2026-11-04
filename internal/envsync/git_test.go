@@ -145,3 +145,16 @@ func TestCloneErrorRecognizesAmbiguousGitHubAvailability(t *testing.T) {
 		})
 	}
 }
+
+func TestRedactURLHidesCredentialsEvenWhenTheURLDoesNotParse(t *testing.T) {
+	tests := map[string]string{
+		"https://user:bad%zz-token@github.com/example/env.git": "https://github.com/example/env.git",
+		"https://user:p@ss@exa mple.com":                       "https://exa mple.com",
+		"git@github.com:example/env.git":                       "git@github.com:example/env.git",
+	}
+	for raw, want := range tests {
+		if got := RedactURL(raw); got != want {
+			t.Errorf("RedactURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
