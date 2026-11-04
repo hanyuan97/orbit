@@ -97,3 +97,31 @@ func TestLogStreamWithoutBacklogStreamsOnlyLiveLines(t *testing.T) {
 		})
 	}
 }
+
+func TestLogsRejectsNegativeLineCount(t *testing.T) {
+	for _, path := range []string{"/api/logs/api?lines=-1", "/api/logs/api/stream?lines=-1"} {
+		t.Run(path, func(t *testing.T) {
+			s := newTestServer(t, testConfig())
+			s.app.Logs.Write("api", "line")
+			rec := httptest.NewRecorder()
+
+			s.handleLogs(rec, httptest.NewRequest(http.MethodGet, path, nil))
+
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("status = %d, want 400; body %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestLogsWithZeroLinesReturnsNoLines(t *testing.T) {
+	s := newTestServer(t, testConfig())
+	s.app.Logs.Write("api", "line")
+	rec := httptest.NewRecorder()
+
+	s.handleLogs(rec, httptest.NewRequest(http.MethodGet, "/api/logs/api?lines=0", nil))
+
+	if rec.Code != http.StatusOK || strings.TrimSpace(rec.Body.String()) != `{"lines":[]}` {
+		t.Errorf("response = %d %s, want 200 with no lines", rec.Code, rec.Body.String())
+	}
+}

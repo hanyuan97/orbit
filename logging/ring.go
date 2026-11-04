@@ -50,9 +50,10 @@ func (r *RingBuffer) Lines() []string {
 	return result
 }
 
-// Last returns the last n lines.
+// Last returns the last n lines; a non-positive n returns none.
 func (r *RingBuffer) Last(n int) []string {
 	all := r.Lines()
+	n = max(n, 0)
 	if n >= len(all) {
 		return all
 	}

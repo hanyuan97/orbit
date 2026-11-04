@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -63,6 +64,26 @@ func TestLogsFollowRequestsTheTailBeforeStreaming(t *testing.T) {
 			}
 			if strings.Join(lines, "\n") != strings.Join(tt.want, "\n") {
 				t.Errorf("output lines = %q, want %q", lines, tt.want)
+			}
+		})
+	}
+}
+
+func TestLogsRejectsNegativeLineCountBeforeContactingTheDaemon(t *testing.T) {
+	for _, args := range [][]string{
+		{"api", "--lines", "-1"},
+		{"api", "--follow", "--tail", "-1"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Setenv("ORBIT_HOME", t.TempDir())
+			isolateLogsCommandGlobals(t, false)
+			cmd := logsCmd()
+			cmd.SetArgs(args)
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+
+			if err := cmd.Execute(); !errors.Is(err, cli.ErrInvalidArgument) {
+				t.Errorf("err = %v, want an invalid argument error", err)
 			}
 		})
 	}
