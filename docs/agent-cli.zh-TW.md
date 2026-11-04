@@ -148,16 +148,19 @@ Orbit 還在等 container 變 healthy 時，若 container 停止，等待會立�
 停在 `starting` 的 resource 會回報它停在哪裡。`starting_phase` 為
 `launching`（port 檢查、`pre_start`、啟動 process 或 container）或 `probing`
 （等待 readiness）。受監管的 host process 會帶 `pid`。`http`、`tcp`、`exec` 或
-`healthcheck` check 的 probe 一旦開始（`log` check 沒有 probe），`health_progress` 就帶 `attempts`、`max_retries`、`last_err`、`recovering`、
+`healthcheck` check 的 probe 一旦開始（`log` check 沒有 probe），
+`health_progress` 就帶 `attempts`、`max_retries`、`last_err`、`recovering`、
 `probe_started_at`（只在 probe 進行中出現）、`last_probe_at`（最近一次 probe
-返回的時間）與 `protocol`（cleartext HTTP check 為 `h2c` 或 HTTP/1.x 版本，
-例如 `HTTP/1.1`）。
-合起來判讀：
+返回的時間）與 `protocol`（回應上一次 cleartext HTTP probe 的 `h2c` 或
+HTTP/1.x 版本，例如 `HTTP/1.1`）。它描述最近一次執行，所以在已停止的
+resource 上只是歷史。仍是 `starting` 時合起來判讀：
 
 - `probe_started_at` 一直變舊：probe 本身沒有返回。
-- 沒有進行中的 probe、`last_err` 為空、`last_probe_at` 很近，但仍是
-  `starting`：probe 已通過，但結果沒有生效。
-- `probing` 時兩個欄位都沒有：還沒有任何 probe 開始。
+- 沒有進行中的 probe、`last_err` 為空，且 `last_probe_at` 不再前進：probe
+  已通過，但結果的傳遞卡住了。請取得 goroutine dump。
+- 同上，但 `last_probe_at` 持續前進：probe 已通過、monitoring 在跑，但
+  `healthy` 狀態轉換被丟掉了。
+- `probing` 時兩個時間欄位都沒有：還沒有任何 probe 開始。
 
 要在不停止 daemon 的情況下取得它的 goroutine stack，對 daemon pid（`orbit
 inspect --json` 的 `data.daemon.pid`）送 `SIGUSR1`。dump 會附加到

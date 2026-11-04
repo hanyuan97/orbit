@@ -87,11 +87,7 @@ func TestProgress_ShowsProbeInFlightUntilItReturns(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- c.pollWithProbe(context.Background(), "svc", hc, nil, probe) }()
 
-	select {
-	case <-entered:
-	case <-time.After(5 * time.Second):
-		t.Fatal("probe never started")
-	}
+	await(t, entered, "probe to start")
 	inFlight := c.Progress("svc")
 	if !inFlight.Configured || inFlight.ProbeStartedAt.IsZero() {
 		t.Fatalf("hung probe must be visible as in flight, got %+v", inFlight)
@@ -101,7 +97,13 @@ func TestProgress_ShowsProbeInFlightUntilItReturns(t *testing.T) {
 	}
 
 	close(release)
-	if err := <-done; err != nil {
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pollWithProbe never returned")
+	}
+	if err != nil {
 		t.Fatalf("pollWithProbe: %v", err)
 	}
 	finished := c.Progress("svc")
@@ -144,7 +146,7 @@ func TestProgress_ProbeFromAnEarlierStartCannotClearItsSuccessor(t *testing.T) {
 			return Result{Service: "svc", Healthy: true, Protocol: "HTTP/1.1"}
 		})
 	}()
-	<-staleEntered
+	await(t, staleEntered, "stale probe to start")
 
 	// The service restarts: its new startup poll resets progress and starts
 	// a probe of its own that is still running when the stale one returns.
@@ -160,14 +162,23 @@ func TestProgress_ProbeFromAnEarlierStartCannotClearItsSuccessor(t *testing.T) {
 			return Result{Service: "svc", Healthy: true}
 		})
 	}()
-	<-currentEntered
+	await(t, currentEntered, "current probe to start")
 	close(staleRelease)
-	<-staleDone
+	await(t, staleDone, "stale probe to finish")
 
 	got := c.Progress("svc")
 	if got.ProbeStartedAt.IsZero() || !got.LastProbeAt.IsZero() || got.Protocol != "" {
 		t.Fatalf("stale probe overwrote its successor's progress: %+v", got)
 	}
 	close(currentRelease)
-	<-currentDone
+	await(t, currentDone, "current probe to finish")
+}
+
+func await(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
 }

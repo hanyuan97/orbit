@@ -13,11 +13,15 @@ import (
 
 // watchGoroutineDumpSignal writes a goroutine dump to w on every SIGUSR1.
 // SIGQUIT also dumps stacks but kills the daemon; SIGUSR1 leaves it running.
+// stop returns only after any dump in progress is written, so w can be
+// closed right after.
 func watchGoroutineDumpSignal(w io.Writer) (stop func()) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGUSR1)
 	done := make(chan struct{})
+	finished := make(chan struct{})
 	go func() {
+		defer close(finished)
 		for {
 			select {
 			case <-done:
@@ -33,5 +37,6 @@ func watchGoroutineDumpSignal(w io.Writer) (stop func()) {
 	return func() {
 		signal.Stop(signals)
 		close(done)
+		<-finished
 	}
 }

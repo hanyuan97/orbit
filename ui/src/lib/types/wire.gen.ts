@@ -238,13 +238,15 @@ export interface HealthProgressInfo {
    * LastProbeAt is when the most recent probe returned. Its verdict is
    * recorded before the result reaches the lifecycle, so a starting
    * resource with an empty LastErr and no probe in flight passed its
-   * probe but never turned healthy.
+   * probe but never turned healthy: a LastProbeAt that stops advancing
+   * means delivery is stuck, one that keeps advancing means monitoring
+   * runs and the transition was dropped.
    */
   last_probe_at?: string;
   /**
-   * Protocol is the cleartext HTTP protocol the probe settled on: "h2c"
-   * or the HTTP/1.x version, such as "HTTP/1.1". Absent for other check
-   * types and HTTPS.
+   * Protocol is the cleartext HTTP protocol that answered the last probe:
+   * "h2c" or the HTTP/1.x version, such as "HTTP/1.1". Absent for other
+   * check types and HTTPS.
    */
   protocol?: string;
 }

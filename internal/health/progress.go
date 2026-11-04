@@ -26,9 +26,9 @@ type Progress struct {
 	// before the probe's result is delivered, so a recent value with no
 	// probe in flight on a service still starting points past the probe.
 	LastProbeAt time.Time
-	// Protocol is the cleartext HTTP protocol the probe settled on ("h2c"
-	// or the HTTP/1.x version); empty until a cleartext http probe gets a
-	// response.
+	// Protocol is the cleartext HTTP protocol that answered the last probe
+	// ("h2c" or the HTTP/1.x version); empty until a cleartext http probe
+	// gets a response.
 	Protocol string
 	// probeToken identifies the probe that set ProbeStartedAt, so a probe
 	// that outlives its generation cannot clear or overwrite its
