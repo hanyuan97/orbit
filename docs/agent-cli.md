@@ -364,6 +364,11 @@ A failed `orbit source add` registers nothing, so its `env_repo_access`
 recovery retries `orbit source add <name> --url <url> --json` instead of
 `orbit source sync --json`. Credentials in the URL are removed from the retry
 and the message; the GitHub-auth and install-Git steps stay.
+`orbit init` registers a new source only after its first sync succeeds, so a
+failed first sync of a source named by flags (`env_repo_access` or
+`init_incomplete`) retries the whole init with that source:
+`orbit init --yes --source <name> --url <url> --json` (or `--path`, plus any
+`--ref`, `--workspace`, and `--env`). A bare `orbit init` retries as itself.
 
 Stable `data.operation` values for converted control commands:
 

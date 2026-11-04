@@ -116,7 +116,7 @@ func envRepoAccessError(err error, retry string, attach func(error, []cli.JSONAc
 	}
 	if cloneErr.ReportsAmbiguousGitHubAvailability() {
 		message += "\nCheck the GitHub owner and repository name first. GitHub uses the same response when a private repository is hidden from your current credentials."
-		message += "\nIf the URL is correct and the repo is private, authenticate Git; otherwise update the named source URL."
+		message += "\nIf the URL is correct and the repo is private, authenticate Git; otherwise correct the repository URL."
 		return cli.NewEnvRepoUnavailableError(message)
 	}
 	if cloneErr.IsGitHub() {

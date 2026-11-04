@@ -14,6 +14,7 @@ import (
 	daemonsrv "github.com/iml885203/orbit/internal/daemon"
 	"github.com/iml885203/orbit/internal/envsource"
 	"github.com/iml885203/orbit/internal/envsync"
+	"github.com/iml885203/orbit/internal/shellquote"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +42,9 @@ type initResult struct {
 	Checks        []daemon.DoctorCheck `json:"checks"`
 	Warnings      []string             `json:"warnings"`
 	Ready         bool                 `json:"ready"`
+	// retry replays this init when its source failed the first sync and was
+	// therefore never registered; bare `orbit init` would pick another source.
+	retry string
 }
 
 type initPrinter struct {
@@ -280,7 +284,17 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		}
 		source, syncRes, err := envsource.Refresh(registry, source, daemon.OrbitDir(), false, persist)
 		if err != nil {
-			err = sourceSyncError(source, err)
+			if persist {
+				err = sourceSyncError(source, err)
+			} else {
+				// Bare init rebuilds the same default source, and replaying it
+				// unpinned keeps the quickstart and its current demo ref.
+				result.retry = "orbit init --yes"
+				if explicit || initSource != "" || initPath != "" || initWorkspace != "" {
+					result.retry = initSourceCommand(source, initEnvName)
+				}
+				err = firstSyncError(source, err, result.retry)
+			}
 			syncFailure = err
 			syncWarning = "source sync failed: " + err.Error()
 			if defaultQuickstart {
@@ -528,10 +542,8 @@ func finishInit(output initPrinter, result initResult, syncFailure error) error 
 
 	if cli.JSONOutput {
 		if !result.Ready {
-			failure := initFailure(result, syncFailure)
-			actions := initFailureRecommendedActions(result, failure)
-			failure = cli.WithJSONReplacementActions(failure, actions)
-			if err := cli.WriteJSONFailure(os.Stdout, commandString(), result, failure, actions); err != nil {
+			failure := initFailureWithRecovery(result, syncFailure)
+			if err := cli.WriteJSONFailure(os.Stdout, commandString(), result, failure, nil); err != nil {
 				return err
 			}
 			return errCLIJSONAlreadyRendered{err: failure}
@@ -539,9 +551,28 @@ func finishInit(output initPrinter, result initResult, syncFailure error) error 
 		return cli.WriteJSONSuccess(os.Stdout, commandString(), result, initRecommendedActions(result))
 	}
 	if !result.Ready {
+		if result.retry != "" {
+			return initFailureWithRecovery(result, syncFailure)
+		}
 		return initFailure(result, syncFailure)
 	}
 	return nil
+}
+
+// initFailureWithRecovery replaces the classified recovery with init's own,
+// which knows whether the source was registered.
+func initFailureWithRecovery(result initResult, syncFailure error) error {
+	failure := initFailure(result, syncFailure)
+	return cli.WithJSONReplacementActions(failure, initFailureRecommendedActions(result, failure))
+}
+
+// initSourceCommand replays init for source, which was never registered.
+func initSourceCommand(source envsource.Source, env string) string {
+	args := append([]string{"orbit", "init", "--yes", "--source", shellquote.Quote(source.Name)}, sourceFlags(source)...)
+	if env != "" {
+		args = append(args, "--env", shellquote.Quote(env))
+	}
+	return strings.Join(args, " ")
 }
 
 func initFailure(result initResult, syncFailure error) error {
@@ -579,7 +610,13 @@ func initFailureRecommendedActions(result initResult, failure error) []cli.JSONA
 	if errors.Is(failure, cli.ErrEnvRepoUnavailable) {
 		return nil
 	}
-	return initRecommendedActions(result)
+	actions := initRecommendedActions(result)
+	if result.retry != "" && errors.Is(failure, cli.ErrEnvRepoAccess) {
+		// Keep the access steps (authenticate GitHub, install Git) the sync
+		// error names after its retry.
+		actions = cli.MergeActions(actions, cli.RecommendedActions(failure))
+	}
+	return actions
 }
 
 func buildInitCompletion(result initResult, syncFailure error) initCompletion {
@@ -587,6 +624,16 @@ func buildInitCompletion(result initResult, syncFailure error) initCompletion {
 		return initCompletion{
 			Heading: "Setup is incomplete",
 			Detail:  "Verify the environment repository URL first; if it is correct and private, authenticate Git.",
+		}
+	}
+	if result.ActiveEnv == "" && result.retry != "" {
+		// No HumanCommand: the sync failure names the retry as its own next
+		// step, and printing it here too would show the same command twice.
+		return initCompletion{
+			Heading:     "Setup is incomplete",
+			Detail:      "The source was not saved. Fix the sync issue above, then retry setup with this source.",
+			JSONCommand: result.retry + " --json",
+			Reason:      "Retry setup with the source that failed to sync.",
 		}
 	}
 	if result.ActiveEnv == "" {

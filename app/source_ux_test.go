@@ -335,7 +335,7 @@ func TestFailedSourceAddRetriesTheAddWithoutCredentials(t *testing.T) {
 		URL:  "https://user:s3cret-token@github.com/example/private-env.git",
 		Ref:  "main",
 	}
-	failure := sourceAddSyncError(source, &envsync.CloneError{URL: source.URL, Err: errors.New("exit status 128")})
+	failure := firstSyncError(source, &envsync.CloneError{URL: source.URL, Err: errors.New("exit status 128")}, sourceAddCommand(source))
 
 	var buf bytes.Buffer
 	if err := cli.WriteJSONFailure(&buf, "orbit source add --json", nil, failure, nil); err != nil {
@@ -375,7 +375,7 @@ func TestFailedSourceAddRetriesTheAddWithoutCredentials(t *testing.T) {
 
 func TestFailedSourceAddWithoutGitRetriesTheAdd(t *testing.T) {
 	source := envsource.Source{Name: "team", Type: envsource.TypeGit, URL: "https://git.example.com/env.git", Workspace: "/work/my app"}
-	failure := sourceAddSyncError(source, &envsync.CloneError{URL: source.URL, Err: exec.ErrNotFound})
+	failure := firstSyncError(source, &envsync.CloneError{URL: source.URL, Err: exec.ErrNotFound}, sourceAddCommand(source))
 
 	var buf bytes.Buffer
 	if err := cli.WriteJSONFailure(&buf, "orbit source add --json", nil, failure, nil); err != nil {

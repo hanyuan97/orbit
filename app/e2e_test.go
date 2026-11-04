@@ -2620,7 +2620,8 @@ func TestE2E_InitDoesNotClaimSuccessWhenEnvSyncFails(t *testing.T) {
 	for _, wanted := range []string{
 		"Setup is incomplete",
 		"Verify the repository URL and Git access",
-		"Next: orbit init",
+		// The source was never registered, so only replaying init retries it.
+		"Next: orbit init --yes --source team --url " + missingRepo + "\n",
 	} {
 		if !bytes.Contains(output, []byte(wanted)) {
 			t.Fatalf("init output missing %q:\n%s", wanted, output)
@@ -2628,6 +2629,9 @@ func TestE2E_InitDoesNotClaimSuccessWhenEnvSyncFails(t *testing.T) {
 	}
 	if bytes.Contains(output, []byte("Setup complete!")) {
 		t.Fatalf("init falsely claims success:\n%s", output)
+	}
+	if n := bytes.Count(output, []byte("Next: ")); n != 1 {
+		t.Fatalf("init output names %d next steps, want one:\n%s", n, output)
 	}
 	for _, unwanted := range []string{"Step 3: Environment", "Step 4: Health check", "reading config"} {
 		if bytes.Contains(output, []byte(unwanted)) {
@@ -2674,8 +2678,63 @@ func TestE2E_InitJSONFailureRetainsDiagnosticData(t *testing.T) {
 	for _, action := range envelope.RecommendedActions {
 		commands[action.Command] = true
 	}
-	if !commands["orbit init --yes --json"] {
+	retry := "orbit init --yes --source team --url " + missingRepo + " --json"
+	if !commands[retry] || envelope.Error.NextCommand != retry {
+		t.Fatalf("next_command = %q, recommended_actions = %+v, want %q", envelope.Error.NextCommand, envelope.RecommendedActions, retry)
+	}
+}
+
+func TestE2E_InitRetriesALocalSourceThatFailedItsFirstSync(t *testing.T) {
+	binary := findOrbitBinary(t)
+	local := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(local, "envs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(local, "envs", "dev.yaml"), []byte("not: [valid"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command(binary, "init", "--yes", "--source", "loc", "--path", local, "--env", "dev", "--json")
+	command.Dir = t.TempDir()
+	command.Env = append(os.Environ(), "ORBIT_HOME="+t.TempDir())
+	output, err := command.Output()
+	if err == nil {
+		t.Fatalf("init with an invalid local source succeeded:\n%s", output)
+	}
+	envelope := parseE2EEnvelope(t, string(output))
+	retry := "orbit init --yes --source loc --path " + local + " --env dev --json"
+	if envelope.Error == nil || envelope.Error.Code != "init_incomplete" || envelope.Error.NextCommand != retry {
+		t.Fatalf("error = %+v, want init_incomplete retrying %q", envelope.Error, retry)
+	}
+	if len(envelope.RecommendedActions) != 1 || envelope.RecommendedActions[0].Command != retry {
 		t.Fatalf("recommended_actions = %+v", envelope.RecommendedActions)
+	}
+}
+
+// Bare init rebuilds the same default source, so its retry stays bare rather
+// than pinning the release's demo URL and ref.
+func TestE2E_BareInitRetriesAsItself(t *testing.T) {
+	binary := findOrbitBinary(t)
+	env := append(os.Environ(), "ORBIT_HOME="+t.TempDir(), "PATH="+t.TempDir())
+	command := exec.Command(binary, "init", "--yes", "--json")
+	command.Dir = t.TempDir()
+	command.Env = env
+	output, err := command.Output()
+	if err == nil {
+		t.Fatalf("init without git succeeded:\n%s", output)
+	}
+	envelope := parseE2EEnvelope(t, string(output))
+	if envelope.Error == nil || envelope.Error.NextCommand != "orbit init --yes --json" ||
+		!strings.Contains(envelope.Error.Message, "retry `orbit init --yes`") ||
+		strings.Contains(envelope.Error.Message, "orbit source sync") {
+		t.Fatalf("error = %+v", envelope.Error)
+	}
+
+	human := exec.Command(binary, "init", "--yes")
+	human.Dir = t.TempDir()
+	human.Env = env
+	humanOutput, _ := human.CombinedOutput()
+	if n := bytes.Count(humanOutput, []byte("Next: ")); n != 1 || !bytes.Contains(humanOutput, []byte("Next: orbit init --yes\n")) {
+		t.Fatalf("human output must name one retry, orbit init --yes:\n%s", humanOutput)
 	}
 }
 
