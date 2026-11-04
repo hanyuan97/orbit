@@ -57,7 +57,8 @@ Cleanup 不需要該 instance 原本的 config，因此即使存放該檔案的 
 已不存在仍可執行。執行中的 instance 會透過它自己的 daemon 停止。對已停止的
 instance，Orbit 只會停止 live process group、working directory 與 command 仍符合
 紀錄的 service processes。其他 PID 會保持執行，因為 PID 可能在重開機後被重複使用，
-並回報為 [skipped process](agent-cli.zh-TW.md)。Cleanup 仍會移除該 instance 的紀錄，
+並回報為 [skipped process](agent-cli.zh-TW.md)。符合紀錄但無法停止的 process group
+也會以相同方式回報，reason 為停止時的錯誤。Cleanup 仍會移除該 instance 的紀錄，
 若該 PID 仍是該 service，請自行停止它。
 
 Orbit 會在新建的 named volumes 加上該 instance 的 exact ownership label。舊版

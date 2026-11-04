@@ -56,7 +56,8 @@ Every lifecycle command accepts `--instance <name>`. Use `orbit instance list
 resolved resource endpoints. `orbit instance clean <name> --json` stops the
 instance and removes only resources carrying that instance's ownership. Its
 `data` is `{instance, removed}`, plus `skipped_processes[]` (`service`, `pid`,
-`reason`) when it left recorded PIDs running.
+`reason`) when it left recorded PIDs running, either unproven or failing to
+stop.
 Recommended actions emitted for a named runtime retain that instance target.
 The full targeting and cleanup model is documented in
 [Isolated runtime instances](instances.md).

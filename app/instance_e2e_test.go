@@ -437,6 +437,8 @@ func assertCleaningStoppedInstanceNeedsNoConfig(t *testing.T, env *e2eEnv, peer 
 	if !envelope.OK || len(data.Skipped) != 1 || data.Skipped[0].PID != unrelated.Process.Pid {
 		t.Fatalf("clean without config did not report the unproven pid: %s", output)
 	}
+	// Clean has returned, so any signal it sent has landed; the window only
+	// lets Wait observe an exit it caused.
 	select {
 	case <-unrelatedExited:
 		t.Fatal("clean killed an unrelated process recorded under a reused pid")

@@ -42,10 +42,11 @@ func parseProcArgs2(raw []byte) ([]string, error) {
 
 // parseProcCmdline decodes /proc/<pid>/cmdline. A program that sets its
 // process title (npm, nginx) overwrites the argv area with one space-joined
-// string and NUL padding, so that shape is split back into words.
+// string and NUL padding, so that shape is split back into words. A single
+// real argument ends in one NUL and keeps its spaces.
 func parseProcCmdline(raw []byte) []string {
 	args := strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
-	if len(args) == 1 {
+	if len(args) == 1 && bytes.HasSuffix(raw, []byte("\x00\x00")) {
 		return strings.Fields(args[0])
 	}
 	return args

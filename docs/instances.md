@@ -62,8 +62,10 @@ instance stops through its own daemon. For a stopped instance, Orbit stops only
 recorded service processes whose live process group, working directory, and
 command still match the record. It leaves any other PID running, because a PID
 can be reused after a reboot, and reports it as a
-[skipped process](agent-cli.md). Clean still removes the instance's records,
-so stop that PID yourself if it is still the service.
+[skipped process](agent-cli.md). A matching process group that fails to stop
+is reported the same way, with the stop error as its reason. Clean still
+removes the instance's records, so stop such a PID yourself if it is still the
+service.
 
 Orbit labels newly created named volumes with their exact instance ownership.
 Volumes created by older Orbit versions may not have this label. Cleanup
