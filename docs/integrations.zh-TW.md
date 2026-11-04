@@ -27,7 +27,7 @@ logs 與 traces 可以交給 Herdr app terminal 裡的 coding agent。
 安裝：把這段貼給 Herdr app 裡的 agent。
 
 ```text
-Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/iml885203/orbit--integrations--herdr-app
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/iml885203/orbit/tree/main/integrations/herdr-app
 ```
 
 agent 會先讀過每個檔案，把 `mods/orbit/` 複製到 `~/.config/herdr-app/mods/`，

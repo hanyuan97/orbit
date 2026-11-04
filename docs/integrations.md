@@ -28,7 +28,7 @@ coding agent in a Herdr app terminal.
 Install: paste this into the agent running in the Herdr app.
 
 ```text
-Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/iml885203/orbit--integrations--herdr-app
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: https://github.com/iml885203/orbit/tree/main/integrations/herdr-app
 ```
 
 The agent reads every file first, copies `mods/orbit/` into
