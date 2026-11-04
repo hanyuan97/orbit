@@ -359,7 +359,7 @@ func StartDaemonWithContext(configPath string, features []string, contextKind st
 	preferredDashboardPort, pinnedDashboardPort := dashboardPortFromEnv()
 	if instance.CurrentName() != "" {
 		var err error
-		preferredDashboardPort, err = instance.ResolveDashboardPort(preferredDashboardPort)
+		preferredDashboardPort, err = instance.ResolveDashboardPort(preferredDashboardPort, pinnedDashboardPort, DefaultDashboardPort)
 		if err != nil {
 			return 0, fmt.Errorf("resolving instance dashboard port: %w", err)
 		}
@@ -537,8 +537,9 @@ func SocketPath() string {
 	return DefaultSocketPath()
 }
 
-// defaultDashboardPort is the TCP port the dashboard listens on by default.
-const defaultDashboardPort = 19800
+// DefaultDashboardPort is the TCP port the dashboard listens on by default.
+// Named instances reserve it so they never take the default runtime's port.
+const DefaultDashboardPort = 19800
 
 // DashboardPort returns the active dashboard port. An explicit
 // ORBIT_DASHBOARD_PORT remains pinned; otherwise a running daemon's selected
@@ -551,7 +552,7 @@ func DashboardPort() int {
 	if record.PID > 0 && record.DashboardPort > 0 && IsProcessAlive(record.PID) {
 		return record.DashboardPort
 	}
-	return defaultDashboardPort
+	return DefaultDashboardPort
 }
 
 func dashboardPortFromEnv() (int, bool) {
@@ -560,12 +561,12 @@ func dashboardPortFromEnv() (int, bool) {
 			return n, true
 		}
 	}
-	return defaultDashboardPort, false
+	return DefaultDashboardPort, false
 }
 
 func configuredDashboardPortOrDefault() int {
 	if port, pinned := dashboardPortFromEnv(); pinned {
 		return port
 	}
-	return defaultDashboardPort
+	return DefaultDashboardPort
 }

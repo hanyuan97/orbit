@@ -38,7 +38,9 @@ namespace、network、containers 與 volumes。
 Default runtime 會把宣告的 host ports 視為固定值。Named instance 則把它們視為
 preferences：必要時 Orbit 會選擇可用 port、持久化結果以維持 restart 穩定、將解析
 後的 port 注入 host services，並透過 `up`、`status` 與 `instance list` 回報實際
-endpoints。
+endpoints。已持久化的 port 若被 instance 以外的程式佔用，下次 daemon 啟動時會改用
+可用 port；instance 也不會佔用 default runtime 的 dashboard port。為 instance 設定
+的 `ORBIT_DASHBOARD_PORT` 視為固定值：被佔用時啟動會失敗，而不會改派。
 
 Caller 應使用這些回報的 endpoints，不要假設宣告 port，也不必自行協調
 `ORBIT_HOME`、`ORBIT_NAMESPACE`、`ORBIT_DASHBOARD_PORT` 與 `ORBIT_SOCKET`。

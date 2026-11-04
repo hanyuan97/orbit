@@ -153,6 +153,9 @@ unset ORBIT_DASHBOARD_PORT
 orbit daemon restart
 ```
 
+Named instance 會自行選擇 dashboard port；請見
+[隔離與 ports](instances.zh-TW.md)。
+
 ### 升級後 Orbit 顯示 update ready
 這通常代表 binary 是手動替換的；`orbit update` 會自動重新連接正在執行的
 環境。在 Dashboard 選擇 **Restart now**；Orbit 會在 daemon handoff 後重新

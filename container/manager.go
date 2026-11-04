@@ -563,6 +563,29 @@ func (m *Manager) StopAll(ctx context.Context) error {
 	return nil
 }
 
+// PublishedPorts returns the host ports that this Manager's running
+// orbit-managed containers publish; stopped containers hold no port.
+func (m *Manager) PublishedPorts(ctx context.Context) (map[int]bool, error) {
+	list, err := m.cli.ContainerList(ctx, client.ContainerListOptions{
+		Filters: make(client.Filters).Add("label", labelManaged+"=true"),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing managed containers: %w", err)
+	}
+	ports := make(map[int]bool)
+	for i := range list.Items {
+		if !m.matchesNamespace(list.Items[i].Labels) {
+			continue
+		}
+		for _, published := range list.Items[i].Ports {
+			if published.PublicPort > 0 {
+				ports[int(published.PublicPort)] = true
+			}
+		}
+	}
+	return ports, nil
+}
+
 func (m *Manager) removeContainer(ctx context.Context, containerID string) error {
 	_, err := m.cli.ContainerRemove(ctx, containerID, client.ContainerRemoveOptions{Force: true, RemoveVolumes: true})
 	return err
