@@ -2,7 +2,16 @@
 
 [English](./troubleshooting.md) · [繁體中文](./troubleshooting.zh-TW.md)
 
-常見的失敗模式、它們的意思、以及如何修。先從 `orbit doctor` 開始 —— 它會抓到大部分的 setup 問題並直接告訴你怎麼修。
+先執行 `orbit doctor` 檢查環境並查看修正建議。若問題仍在，依下方的
+症狀或錯誤訊息找出下一步。
+
+| 症狀 | 從這裡查 |
+| --- | --- |
+| 環境起不來、卡在 health check、port 被占用 | [啟動](#啟動) |
+| 無法連線到 DB、Publish 失敗、資料表不見 | [SQL Server](#sql-server) |
+| CLI 連不到 daemon、Dashboard 打不開、更新待套用 | [Daemon](#daemon) |
+| Orbit 目錄無法寫入、找不到容器 | [檔案權限](#檔案系統與權限) · [CLI](#cli) |
+| 需要看 log 或縮小問題範圍 | [診斷](#診斷) |
 
 ## 啟動
 
@@ -21,17 +30,9 @@ container 已經啟動，但 health check 一直沒成功。
 - **Apple Silicon 上的 Rosetta 模擬**：任何標 `platform: linux/amd64` 的 container 都會跑在 Rosetta 上 —— 啟動時間預期會多一倍。可以用 `docker inspect --format '{{.Platform}}'` 確認。
 
 ### `port already in use`
-有別的 process 佔住了 Orbit 想用的 port。
 
-Orbit 會自動重新辨識自己 namespace 內的 container 與已記錄的 host
-process，包含 daemon 非預期結束後的情況。因此看到這個訊息，代表目前
-owner 無法對應到所選的 Orbit environment；正常的 Orbit resource 不需要
-使用者手動清理。
-
-Orbit 會指出受影響的 resource 與 port，並提供一條唯讀指令查看目前 owner。
-請透過管理該 process 的工具將它停止，或在 shared environment 中修改該
-resource 的 host port，再重新執行 `orbit up`。讀取 container logs 或盲目
-restart resource 都無法釋放由其他 process 佔用的 host port。
+用 Orbit 顯示的檢查指令找出占用 port 的程序。停止該程序，或改環境設定中的
+host port，再跑 `orbit up`。
 
 ### 私有 registry `pull unauthorized` / `pull access denied`
 你的 Docker client 沒辦法 pull image。中性版 `orbit doctor` 會確認 Docker 是否可用,但不會探測 private registry。請向你的 registry provider 驗證身份,例如：
@@ -117,6 +118,12 @@ docker volume rm <volume-name>
 orbit up <sqlserver.target>
 ```
 
+### `orbit sqlserver publish` 回報 SQL Server credential unavailable
+
+確認 `sqlserver.password_env` 指向 target container 中非空的環境變數，然後
+執行 `orbit restart <target>`。Orbit 不接受第二組密碼 override，避免悄悄
+連到與 active environment 宣告不同的 target。
+
 ## Daemon
 
 ### `orbit daemon status` 說在跑，但 `orbit up` 連不到它
@@ -128,10 +135,14 @@ orbit daemon status   # 或：orbit up
 
 如果還是失敗，那就手動把檔案刪掉當 fallback：
 
+::: details 手動清理
+
 ```bash
 rm ~/.orbit/orbit.sock ~/.orbit/orbit.pid
 orbit daemon start
 ```
+
+:::
 
 ### Dashboard 的 :19800 port 打不開
 Orbit 通常會自動選擇其他可用的 port，`orbit open` 也會使用實際位址。如果你有
@@ -166,12 +177,6 @@ sudo chown -R $(whoami) ~/.orbit
 ### `orbit exec` 抱怨 container 名字不存在
 Orbit 預設命名是 `orbit-<service>`。如果你設了 `ORBIT_NAMESPACE=foo`，名字會變成 `foo-<service>`。可以用 `docker ps --format '{{.Names}}'` 確認。
 
-### `orbit sqlserver publish` 回報 SQL Server credential unavailable
-
-確認 `sqlserver.password_env` 指向 target container 中非空的環境變數，然後
-執行 `orbit restart <target>`。Orbit 不接受第二組密碼 override，避免悄悄
-連到與 active environment 宣告不同的 target。
-
 ## 診斷
 
 卡住的時候：
@@ -188,5 +193,5 @@ Orbit 預設命名是 `orbit-<service>`。如果你設了 `ORBIT_NAMESPACE=foo`�
 
 - [docs/architecture.zh-TW.md](architecture.zh-TW.md) —— event model 與 state machine 的背景
 - [docs/configuration.zh-TW.md](configuration.zh-TW.md) —— YAML 欄位說明
-- [docs/development.zh-TW.md](development.zh-TW.md) —— development setup 與 workflow
+- [安裝與更新](installation.zh-TW.md) — 安裝與升級方式
 - [docs/sql-workflow.zh-TW.md](sql-workflow.zh-TW.md) —— 更深入的 SQL 流程

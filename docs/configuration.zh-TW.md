@@ -2,9 +2,8 @@
 
 [English](./configuration.md) · [繁體中文](./configuration.zh-TW.md)
 
-Orbit environment 檔案完整的 YAML schema。專案可以把 `orbit.yaml` 放在程式碼
-旁；團隊也可以透過 `~/.orbit/envs/` 發布檔案，再用 `orbit switch <name>`
-選擇。較大型的可執行環境請參考
+撰寫或更新 Orbit environment 設定時，可在這裡查閱設定檔的選用順序與
+`orbit.yaml` 的所有欄位。較完整的可執行環境請參考
 [repository 範例](https://github.com/iml885203/orbit/blob/main/envs/example.yaml)。
 
 **目錄**

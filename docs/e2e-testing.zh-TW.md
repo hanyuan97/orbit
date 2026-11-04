@@ -1,11 +1,11 @@
-# 在 E2E 測試底下使用 Orbit
+# E2E 測試
 
 [English](./e2e-testing.md) · [繁體中文](./e2e-testing.zh-TW.md)
 
-Orbit 在 E2E 架構裡的職責刻意收得很小：提供共用的基礎設施，並且誠實回答關於
-它的問題。測試 harness 把所有測試專屬的東西疊在上面，永遠不重新配置整台機器。
+用 Orbit 啟動 E2E 測試需要的資料庫、快取和訊息服務。測試程式負責準備自己的資料，
+並在執行前確認環境已就緒。
 
-## 疊加模式
+## 基礎設施與測試資料
 
 把整個 stack 分成三層，各有各的擁有者：
 
@@ -15,12 +15,18 @@ Orbit 在 E2E 架構裡的職責刻意收得很小：提供共用的基礎設施
 | 測試資料（專屬的 database 或 schema） | 測試 harness | 可拋棄，scenario 之間重置 |
 | 受測系統（app runtime） | 測試 harness | 每次執行以測試 profile 啟動 |
 
-開發者平常跑的基礎設施就是測試套件用的基礎設施。套件不自己起一份副本；它在
-共用的伺服器上建自己的 database、讓自己的 app runtime 指過去，並透過應用程式
-清理資料（app 內建的測試專用 reset endpoint，比任何基礎設施層的還原都快上
-幾個數量級）。
+### 資料庫隔離
 
-## 驗證基底——永遠不要切換它
+![開發用程式連到 app_dev，測試用程式連到同一台 SQL Server 上的 app_e2e。](./assets/e2e-shared-infrastructure.svg)
+
+開發用程式連到 `app_dev`，測試設定連到 `app_e2e`。透過各自的連線設定指定
+資料庫名稱。如果使用 SQL Project，將 `app_e2e` 設為 publish 目標，跑
+`orbit sqlserver publish app_e2e` 後再建立測試資料。重設前先確認目標是
+`app_e2e`，名稱不符就中止。兩套應用程式若同時運行，請各用一個 port。
+
+本機 SQL Project 的 publish 方式見 [SQL Projects](sql-workflow.zh-TW.md)。
+
+## 環境就緒檢查
 
 `orbit switch` 會停掉運行中的資源並重啟 daemon。它是機器層級的 provisioning
 步驟：放在 pipeline 的 setup 階段或由人親手輸入是對的，作為跑測試的隱式副作
@@ -44,7 +50,7 @@ harness 應該做的是開跑前先*驗證*：
 healthy 的資源，含狀態、原因與有上限的 log tail。CI log 不需要第二個指令就能
 看到解釋。payload 形狀見 [agent CLI contract](agent-cli.zh-TW.md)。
 
-## 在同一台機器跑第二個 stack
+## Instances
 
 專屬 runner 或 dev 環境旁的第二個 stack，請為該次執行指定唯一 named instance：
 

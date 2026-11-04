@@ -1,78 +1,43 @@
-# SQL Server Database Projects
+# SQL Projects
 
 [English](./sql-workflow.md) · [繁體中文](./sql-workflow.zh-TW.md)
 
-The command family is named `orbit sqlserver` because this optional workflow
-implements SQL Server Database Project semantics; it is not Orbit's generic
-database abstraction. Redis, MongoDB, and PostgreSQL client conveniences remain
-under `orbit query`.
+Orbit’s optional SQL Server workflow lets you preview and publish changes
+from a SQL project (`.sqlproj`) to a local database. Use `diff` after a
+pull, then `publish` when the local schema needs updating.
 
-An environment that explicitly enables `sqlserver` gets five Database Project
-commands: `list`, `diff`, `publish`, `reset`, and `query`. Other environments
-do not show this workflow.
-Publishing runs entirely on the host. Orbit normally builds the SQL project
-with `dotnet build`, then pushes the dacpac to the configured SQL Server target
-with `sqlpackage`. A run may instead supply prebuilt dacpacs.
-The implementation used to manage fast resets stays internal.
+Enable `sqlserver` in your [environment configuration](configuration.md#sqlserver)
+to use the workflow.
 
-## Volume and persistence model
+## Schema Diff
 
-The environment config should mount persistent storage at `/var/opt/mssql`,
-where SQL Server writes its `.mdf` / `.ldf` files. With that mount, your
-accumulated schema and data are preserved
-across:
+![Orbit checks recorded state first. DeployReport compares a DACPAC with the local database.](./assets/sql-schema-check.svg)
 
-- `orbit restart <sqlserver.target>`
-- Docker daemon restarts
-- Host reboots
-- `orbit down` followed by `orbit up`
+Pull the latest code, then run `orbit sqlserver diff AppDB`. If the quick
+check lists a new `GetOrder.sql`, you know a source file changed since
+the last publish. For the database impact, run
+`orbit sqlserver diff AppDB --analyze`.
 
-Orbit never removes that storage automatically. Removing its volume or bind
-mount data permanently deletes every local database. Use `orbit sqlserver reset
-<dbname>` when only one database needs clean data.
+A full comparison prepares or reuses a DACPAC and runs SqlPackage
+`/Action:DeployReport` to list what a publish would create, alter, or
+drop. Orbit also takes this path when recorded state cannot answer the
+check. Neither command changes the database.
 
-A fresh volume starts empty; `orbit sqlserver publish --all` creates and publishes
-every configured database.
+## Publish
 
-## When to use which command
+![Build the SQL project into a DACPAC on the host, then apply it to local SQL Server with SqlPackage.](./assets/sql-publish.svg)
 
-| Situation | Command | Cost |
-|---|---|---|
-| Check whether source changed | `orbit sqlserver diff <dbname>` | usually under a second |
-| You just changed one stored proc / table | `orbit sqlserver publish <dbname>` | ~15s, idempotent, no downtime |
-| You merged schema from `main` and want it locally | `orbit sqlserver publish <dbname>` (or `--all`) | ~15s per DB, data preserved |
-| The live DB is full of bad test data | `orbit sqlserver reset <dbname>` | seconds, local data discarded |
-| Set up a fresh SQL Server | `orbit sqlserver publish --all` | creates and publishes every configured DB |
+```sh
+orbit sqlserver publish AccountsDev
+```
 
-## `orbit sqlserver publish`: the everyday path
+Orbit blocks changes that may lose data by default. Check the impact with
+`diff` before applying them.
 
-By default, `orbit sqlserver publish <db>` builds the SQL project **on the host**
-(`dotnet build`) and publishes the dacpac straight to the configured target's published
-port with the host `sqlpackage` — no image rebuild, no
-container-side tooling, native arm64 on Apple Silicon. It is idempotent:
-an unchanged project converges to a no-op in seconds, and data is always
-preserved (destructive changes are blocked unless `--allow-data-loss`).
+::: details Configuration and prerequisites
 
-Agents and scripts can use `orbit sqlserver publish <db> --json` for this
-ordinary path. Success returns an `orbit.cli.v1` envelope naming every
-published database. A forced publish never runs in JSON mode: the error
-envelope preserves the selected scope and `--allow-data-loss` as a
-`destructive: true` manual action, without `--yes`, so a person still sees the
-confirmation prompt.
-
-The database schema converges to the project: adding, changing, or deleting a
-stored procedure, table, or other project object produces the corresponding
-create, alter, or drop. Drops that could lose data are reported by
-`orbit sqlserver diff`
-and blocked by publish until the user explicitly passes `--allow-data-loss`. A forced
-publish shows every affected database and asks for confirmation; use
-`--allow-data-loss --yes` only after reviewing the impact when running non-interactively.
-
-Requirements (checked by `orbit doctor`): sqlpackage on the host —
-`dotnet tool install -g microsoft.sqlpackage` — plus the .NET SDK when Orbit
-builds from source.
-
-One explicit section decides both what gets published and where:
+Set the SQL Server container and projects in `orbit.yaml`. The host needs
+SqlPackage and, for source builds, the .NET SDK. Run `orbit doctor` to check.
 
 ```yaml
 sqlserver:
@@ -85,19 +50,25 @@ sqlserver:
     - path: database/Orders/Orders.sqlproj
 ```
 
-`target` names the container that receives publishes. Project entries are
-workspace-relative `.sqlproj` files. By default the database name comes from
-the filename; `databases` explicitly deploys one project to several names.
-When present, `databases` must contain at least one name.
-Each database name must map to one project, so separate project files with the
-same basename are rejected. There is no image sniffing, conventional
-container name, directory scan, or separate per-machine allowlist.
+`target` names the SQL Server container. Each `path` is relative to the
+workspace. The project filename supplies the default database name. If you
+set `databases`, give at least one name and map each name to one project.
+The DACPAC must match the `.sqlproj` basename, including projects that set
+`SqlTargetName`.
 
-Orbit publishes the dacpac the build names after the `.sqlproj` itself, whatever
-the target databases are called. A project that renames its own output (via
-`<SqlTargetName>`) fails rather than publishing a different artifact.
+:::
 
-### The whole env at once: `--all`
+::: details JSON and changes that may lose data
+
+Add `--json` for ordinary publishes. Success lists the published databases.
+Changes that may lose data require confirmation with `--allow-data-loss`.
+In JSON mode, Orbit reports a manual command with the selected scope and
+`--allow-data-loss`, leaving out `--yes` so a person can review the change.
+For automation, use `--yes` only after reviewing the impact and target.
+
+:::
+
+### Batch Publish
 
 `orbit sqlserver publish --all` publishes every database from the project merge
 sequentially, stopping at the first failure. Add `--parallel[=N]` to publish
@@ -112,19 +83,11 @@ already exists`. Publishing sequentially the first time and reusing that
 server afterwards avoids it; a workflow that provisions a fresh container per
 run should stay sequential.
 
-On a server that is already provisioned it earns its place: one measured run
-of five prebuilt-dacpac databases took 28s sequentially and 11–12s at
-`--parallel=4`. Two caveats on measuring it yourself — the first publish after
-provisioning is not representative (that same run took 30s concurrently, no
-better than sequential, and only settled from the second onward), and building
-from source instead of prebuilt artifacts shifts the ratio because the build,
-not the apply, becomes the cost.
-
 Against an empty SQL Server, the same command creates missing databases and
 deploys referenced shared objects. Rerun it after fixing a failed project;
 successful databases converge to no-ops.
 
-### Publish prebuilt dacpacs
+### Prebuilt DACPACs
 
 Use `--dacpac-dir <root>` with `publish`, `diff`, or `reset` when the current
 runner already has build artifacts:
@@ -162,7 +125,7 @@ artifacts can replace both. Missing sqlpackage remains a failed prerequisite.
 reads that resolved value only when a DB operation runs and never exposes it
 in status, logs, or JSON output.
 
-### Clean resets: `orbit sqlserver reset`
+### Reset
 
 `orbit sqlserver reset <db>` disconnects active clients, discards local data, and
 applies the latest schema. No setup command is required. Orbit automatically
@@ -174,12 +137,41 @@ states which path will run before any data is removed.
 drift, publish, and reset operations rather than embedding a general SQL
 console.
 
-## Dashboard visibility
+## Persistence
+
+The environment config should mount persistent storage at `/var/opt/mssql`,
+where SQL Server writes its `.mdf` / `.ldf` files. With that mount, your
+accumulated schema and data are preserved
+across:
+
+- `orbit restart <sqlserver.target>`
+- Docker daemon restarts
+- Host reboots
+- `orbit down` followed by `orbit up`
+
+Orbit never removes that storage automatically. Removing its volume or bind
+mount data permanently deletes every local database. Use `orbit sqlserver reset
+<dbname>` when only one database needs clean data.
+
+A fresh volume starts empty; `orbit sqlserver publish --all` creates and publishes
+every configured database.
+
+## Commands
+
+| Situation | Command | Cost |
+|---|---|---|
+| Check whether source changed | `orbit sqlserver diff <dbname>` | usually under a second |
+| You just changed one stored proc / table | `orbit sqlserver publish <dbname>` | ~15s, idempotent, no downtime |
+| You merged schema from `main` and want it locally | `orbit sqlserver publish <dbname>` (or `--all`) | ~15s per DB, data preserved |
+| The live DB is full of bad test data | `orbit sqlserver reset <dbname>` | seconds, local data discarded |
+| Set up a fresh SQL Server | `orbit sqlserver publish --all` | creates and publishes every configured DB |
+
+## Dashboard
 
 The SQL Server page checks source changes when opened or focused. Each database
 shows whether it is in sync and provides Check, Publish, and Reset actions.
 
-### Publish from the dashboard
+### Dashboard Publish
 
 The SQL Server page has per-db Publish and Reset buttons plus Publish all.
 Publish streams its output in a log panel; Reset always prompts before
@@ -191,7 +183,7 @@ while another op is in flight. When publish detects possible data loss, it is
 blocked until the user reviews the warning and explicitly confirms the
 force-publish action.
 
-## See also
+## See Also
 
 - [configuration.md](configuration.md#sqlserver) — complete target container and `sqlserver` configuration
 - [docs/troubleshooting.md](troubleshooting.md) — broader error catalog

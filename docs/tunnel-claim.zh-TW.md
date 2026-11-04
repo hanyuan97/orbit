@@ -2,7 +2,9 @@
 
 [English](./tunnel-claim.md) · [繁體中文](./tunnel-claim.zh-TW.md)
 
-`orbit tunnel` 內嵌 [Tunlease](https://github.com/iml885203/tunlease) client，能把第三方固定呼叫的 callback path 導向你電腦上的服務。不需要另外安裝 `tul` binary，也不需要 Kubernetes 權限、`kubectl` 或 SSH。
+Claim 一個 staging callback path，就能將第三方 request 導向本機服務。
+`orbit tunnel` 內嵌 [Tunlease](https://github.com/iml885203/tunlease) client，
+無須另外安裝 `tul`，也無須 Kubernetes 權限、`kubectl` 或 SSH。
 
 ## 快速開始
 
@@ -44,23 +46,7 @@ Orbit 會自動重新連線；daemon 關閉時會 release claim，WebSocket 中�
 
 ## 運作方式
 
-```mermaid
-flowchart LR
-    third["第三方 provider"]
-    ep["固定公開 endpoint"]
-    gw["Tunlease gateway"]
-    origin["Origin"]
-    subgraph your["你的機器"]
-        orbit["Orbit daemon"]
-        proxy["access-log proxy"]
-        app["你的服務 :8080"]
-    end
-
-    orbit == "① claim + reverse tunnel（WSS + yamux）" ==> gw
-    third --> ep --> gw
-    gw == "② 已 claim callback" ==> orbit --> proxy --> app
-    gw -->|"未 claim callback"| origin
-```
+![已認領的回呼透過 Orbit 送到本機服務，其餘回呼繼續送往原站。](./assets/tunnel-callback-routing.svg)
 
 Orbit 會主動連向 gateway；沒有連線直接進入你的機器。WSS 連線會擁有
 claimed path。符合的 callback 沿同一條 tunnel 送回，先通過 Orbit 的

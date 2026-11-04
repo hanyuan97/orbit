@@ -1,8 +1,8 @@
 # 版本與相容性
 
-Orbit CLI 使用[語義化版本](https://semver.org/lang/zh-TW/)，candidate version
-記錄在 repository root 的 `VERSION`。`plugins/orbit` plugin 獨立編版，讓只修改
-skill 的更新不必連帶發布 CLI。
+在這裡查閱 Orbit 的版本規則與穩定契約。CLI 採用
+[語義化版本](https://semver.org/lang/zh-TW/)，候選版本記錄在 repo 根目錄的
+`VERSION`。隨附的 `plugins/orbit` 外掛獨立編版，只更新 skill 時可單獨發布。
 
 ## 發布順序
 

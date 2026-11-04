@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 280" role="img" aria-labelledby="title desc">
+  <title id="title">Aspire and Orbit tooling processes</title>
+  <desc id="desc">In this eShop run, Aspire's 703 MB comprised 311 MB for AppHost, Dashboard and CLI, 112 MB for the DCP core, and 280 MB for 11 DCP monitors. Orbit's daemon used 21 MB.</desc>
+  <style>
+    .panel { fill: #f6f8fa; }
+    .text { fill: #1f2328; }
+    .aspire { fill: #ede6fa; stroke: #a18acb; }
+    .orbit { fill: #e0edff; stroke: #729dd6; }
+    @media (prefers-color-scheme: dark) {
+      .panel { fill: #161b22; }
+      .text { fill: #e6edf3; }
+      .aspire { fill: #30243f; stroke: #9078bf; }
+      .orbit { fill: #1d324e; stroke: #6896d2; }
+    }
+  </style>
+  <rect class="panel" width="680" height="280" rx="16"/>
+  <g class="text" font-family="system-ui, sans-serif">
+    <text x="25" y="41" font-size="25" font-weight="700">Aspire · 703 MB</text>
+    <text x="425" y="41" font-size="25" font-weight="700">Orbit · 21 MB</text>
+    <rect class="aspire" x="24" y="62" width="360" height="55" rx="8"/>
+    <rect class="aspire" x="24" y="129" width="360" height="55" rx="8"/>
+    <rect class="aspire" x="24" y="196" width="360" height="55" rx="8"/>
+    <rect class="orbit" x="424" y="62" width="230" height="189" rx="8"/>
+    <g font-size="20" font-weight="600">
+      <text x="40" y="87">AppHost, Dashboard, CLI</text>
+      <text x="40" y="154">DCP core</text>
+      <text x="40" y="221">DCP monitors × 11</text>
+      <text x="539" y="148" text-anchor="middle">One daemon</text>
+    </g>
+    <g font-size="18">
+      <text x="40" y="107">311 MB</text>
+      <text x="40" y="174">112 MB</text>
+      <text x="40" y="241">280 MB</text>
+      <text x="539" y="177" text-anchor="middle">Manages the environment</text>
+    </g>
+  </g>
+</svg>

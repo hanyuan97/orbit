@@ -2,7 +2,10 @@
 
 [English](./tunnel-claim.md) · [繁體中文](./tunnel-claim.zh-TW.md)
 
-`orbit tunnel` uses the embedded [Tunlease](https://github.com/iml885203/tunlease) client to route stable third-party callback paths to a service on your machine. You do not need the `tul` binary, Kubernetes access, `kubectl`, or SSH.
+Claim a staging callback path to send third-party requests to a local service.
+`orbit tunnel` uses the embedded [Tunlease](https://github.com/iml885203/tunlease)
+client, so you can claim a route without installing `tul` or using Kubernetes,
+`kubectl`, or SSH.
 
 ## Quick start
 
@@ -50,23 +53,7 @@ Orbit reconnects the data tunnel automatically. It releases active claims when t
 
 ## How it works
 
-```mermaid
-flowchart LR
-    third["3rd-party provider"]
-    ep["Stable public endpoint"]
-    gw["Tunlease gateway"]
-    origin["Origin"]
-    subgraph your["Your machine"]
-        orbit["Orbit daemon"]
-        proxy["access-log proxy"]
-        app["Your service :8080"]
-    end
-
-    orbit == "① claim + reverse tunnel (WSS + yamux)" ==> gw
-    third --> ep --> gw
-    gw == "② claimed callback" ==> orbit --> proxy --> app
-    gw -->|"unclaimed callback"| origin
-```
+![Claimed callbacks reach the local service through Orbit; unclaimed callbacks go to the origin.](./assets/tunnel-callback-routing.svg)
 
 Orbit dials out to the gateway; nothing connects directly into your machine.
 The WSS connection owns the claimed path. Matching callbacks travel back through

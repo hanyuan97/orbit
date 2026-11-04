@@ -2,35 +2,13 @@
 
 [English](./architecture.md) · [繁體中文](./architecture.zh-TW.md)
 
-This document explains how Orbit's internals fit together so you can extend, debug, or audit it without re-reading the whole codebase.
+Follow the path from a CLI command to the daemon, runtime events, and dashboard.
+Use the component map and state machine to debug service behavior or find where
+to extend Orbit.
 
 ## Overview
 
-```mermaid
-flowchart TB
-    subgraph Clients["User-facing"]
-        CLI["orbit CLI<br/>(thin client)"]
-        UI["Dashboard<br/>(Svelte 5, :19800)"]
-    end
-
-    subgraph Daemon["orbit daemon (single long-running process)"]
-        API["HTTP API<br/>unix socket + :19800"]
-        Orch["Orchestrator<br/>event loop + state machine"]
-        API <--> Orch
-    end
-
-    subgraph Managed["Managed workloads"]
-        Containers["Containers<br/>SQL Server, Redis, Kafka, Mongo"]
-        Processes["Dev processes<br/>dotnet watch, pnpm dev"]
-    end
-
-    CLI -->|HTTP over unix socket| API
-    UI -->|HTTP + SSE| API
-    Orch -->|Docker SDK| Containers
-    Orch -->|exec + process groups| Processes
-    Containers -.->|health / drift events| Orch
-    Processes -.->|exit / log events| Orch
-```
+![CLI and Dashboard connect to the daemon, which manages containers and host processes.](./assets/architecture-overview.svg)
 
 Three things to hold in your head:
 
@@ -63,23 +41,7 @@ The CLI (the `app` package, wired by each binary's thin `cmd/orbit/main.go`) is 
 
 Every service and container goes through the same states. Transitions are driven by orchestrator events.
 
-```mermaid
-stateDiagram-v2
-    [*] --> Pending
-    Pending --> Starting: DepsReady
-    Pending --> Building: build step declared
-    Building --> Starting: BuildComplete
-    Building --> Degraded: BuildFailed
-    Starting --> Healthy: HealthOK
-    Starting --> Degraded: HealthFail / ProcessExited / ContainerDrift
-    Healthy --> Degraded: HealthFail / ProcessExited / ContainerDrift
-    Healthy --> Pending: user restart (re-enters the DAG at Pending)
-    Healthy --> Stopping: Shutdown / user stop
-    Degraded --> Healthy: HealthOK (recovery probing)
-    Degraded --> Stopping: Shutdown / user stop
-    Stopping --> Stopped
-    Stopped --> [*]
-```
+![Service lifecycle from Pending to Healthy or Degraded, then Stopping and Stopped.](./assets/architecture-service-states.svg)
 
 State constants live in `internal/engine/state.go` as `ServiceState` (iota enum: `StatePending`, `StateBuilding`, `StateStarting`, `StateHealthy`, `StateDegraded`, `StateStopping`, `StateStopped`, `StateRestarting`). Use the constants — raw strings only appear in JSON output. (`StateRestarting` remains defined for wire/String compatibility, but the current lifecycle routes a restart straight back to `Pending` rather than dwelling in it — see the state diagram above.)
 
@@ -103,34 +65,7 @@ Events never mutate state directly — they are dispatched to the orchestrator w
 
 ## Startup sequence
 
-```mermaid
-sequenceDiagram
-    participant CLI as orbit up
-    participant D as Daemon
-    participant Cfg as Config Loader
-    participant DAG as Dependency DAG
-    participant Orch as Orchestrator
-    participant Svc as Service
-    participant HC as Health Checker
-
-    CLI->>D: ensure daemon running
-    CLI->>D: POST /api/up
-    D->>Cfg: Load(configPath)
-    Cfg-->>D: typed schema
-    D->>DAG: build(services, containers)
-    DAG-->>D: topological order
-    D->>Orch: run(order) — dispatch, non-blocking
-    D-->>CLI: 200 OK (affected resources + dispatch result) — returns immediately
-    Note over Orch,HC: convergence continues async; CLI/dashboard observe via SSE / orbit status
-    Orch->>Svc: start (no deps)
-    Svc-->>Orch: started
-    Orch->>HC: probe()
-    HC-->>Orch: HealthOK
-    Orch->>Svc: start (deps now ready)
-    Svc-->>Orch: started
-    Orch->>HC: probe()
-    HC-->>Orch: HealthOK
-```
+![Orbit loads the configuration, dispatches startup, and starts dependents as health checks pass.](./assets/architecture-startup.svg)
 
 `POST /api/up` returns as soon as startup is *dispatched* (`handlers_service.go` calls `StartServices` then responds), not after everything is healthy — the CLI/dashboard watch convergence over the SSE status stream. Services are launched as soon as their declared dependencies reach `Healthy`. The DAG itself doesn't block — independent services start in parallel, except that non-watch .NET service builds share one context-aware admission gate. Their runtime processes still start independently as soon as each serialized build completes.
 

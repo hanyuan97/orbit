@@ -2,12 +2,8 @@
 
 [English](./tracing.md) · [繁體中文](./tracing.zh-TW.md)
 
-Orbit captures OpenTelemetry traces from locally instrumented services and
-shows them next to the graph and logs you already use, without a separate trace
-UI.
-
-A trace is a path through the dependency graph; Orbit's logs already carry the
-`TraceId`. Tracing is the connective tissue between them.
+Follow a request across local services with OpenTelemetry traces in the
+dashboard or CLI. Use its `TraceId` to find the logs for that request.
 
 ## On by default
 

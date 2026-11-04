@@ -2,11 +2,8 @@
 
 [English](./tracing.md) · [繁體中文](./tracing.zh-TW.md)
 
-Orbit 可以擷取已具備 OpenTelemetry instrumentation 的本機服務 traces，
-並直接放在你已經使用的 graph 與 logs 旁邊，不需要額外的 trace UI。
-
-一條 trace 就是一條穿過 dependency graph 的路徑；而 orbit 的 log 本來就帶著
-`TraceId`。Tracing 是把兩者串起來的那層組織。
+在 dashboard 或 CLI 查看 OpenTelemetry trace，追蹤一個 request 經過哪些
+本機服務。用 `TraceId` 找到該 request 對應的 log。
 
 ## 預設開啟
 

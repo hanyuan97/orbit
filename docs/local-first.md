@@ -8,23 +8,15 @@ From the project you want to run, give your coding agent one request:
 > changes in. You may install the Orbit CLI and plugin; ask before installing
 > anything else.
 
-The agent inspects the existing setup, starts the intended environment,
-verifies representative application behavior, and reports anything that still
-needs you. You do not need to choose an install method or learn Orbit first.
+The agent sets up your project's `orbit.yaml`, starts the environment, and
+verifies an application request or test.
 
-## What your agent reads
+## First YAML
 
-The agent follows the published Orbit skill at
-<https://orbit.dotw.me/agent/SKILL.md>, also linked as **For agents** in the
-site navigation. In short: it installs the official Orbit CLI and plugin and
-asks before installing anything else, describes the project's existing setup in
-a project-local `orbit.yaml` instead of running the public demo, starts the
-environment, and proves a representative application flow responds before
-reporting back. The
-skill is the authoritative description of that loop; this page only points to
-it.
+To set up the environment yourself, [install Orbit](installation.md#install-orbit) and
+[run the first YAML](team-adoption.md#first-yaml).
 
-For manual use, see [Installation](development.md),
-[Configuration](configuration.md), and the
-[runnable example](https://github.com/iml885203/orbit/tree/main/docs/examples/local-first).
-For a shared environment repository, see [Team adoption](team-adoption.md).
+## Agent Skill
+
+The [Orbit skill](https://orbit.dotw.me/agent/SKILL.md) defines what the agent
+checks before reporting that the environment is ready.

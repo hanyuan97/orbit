@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 115" role="img" aria-labelledby="title desc">
+  <title id="title">Publish a SQL project</title>
+  <desc id="desc">Orbit builds the SQL project on the host, then SqlPackage applies the DACPAC to local SQL Server.</desc>
+  <style>
+    .canvas { fill: #f6f8fa; }
+    .node { fill: #ffffff; stroke: #d0d7de; }
+    .label { fill: #1f2328; }
+    .detail { fill: #59636e; }
+    .connector { stroke: #0969da; }
+    .arrowhead { fill: #0969da; }
+    @media (max-width: 440px) {
+      .label { font-size: 24px; transform: translateY(10px); }
+      .detail { display: none; }
+    }
+    @media (prefers-color-scheme: dark) {
+      .canvas { fill: #161b22; }
+      .node { fill: #1c2128; stroke: #30363d; }
+      .label { fill: #e6edf3; }
+      .detail { fill: #a4aeba; }
+      .connector { stroke: #58a6ff; }
+      .arrowhead { fill: #58a6ff; }
+    }
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5Z" class="arrowhead"/></marker></defs>
+  <rect width="720" height="115" rx="16" class="canvas"/>
+  <rect x="20" y="25" width="200" height="65" rx="9" class="node"/>
+  <text x="120" y="52" text-anchor="middle" font-family="system-ui,sans-serif" font-size="19" font-weight="600" class="label">SQL Project</text>
+  <text x="120" y="74" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" class="detail">.sqlproj</text>
+  <rect x="260" y="25" width="200" height="65" rx="9" class="node"/>
+  <text x="360" y="52" text-anchor="middle" font-family="system-ui,sans-serif" font-size="19" font-weight="600" class="label">DACPAC</text>
+  <text x="360" y="74" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" class="detail">Build on the host</text>
+  <rect x="500" y="25" width="200" height="65" rx="9" class="node"/>
+  <text x="600" y="52" text-anchor="middle" font-family="system-ui,sans-serif" font-size="19" font-weight="600" class="label">Local SQL Server</text>
+  <text x="600" y="74" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" class="detail">Apply with SqlPackage</text>
+  <path d="M226 57H253" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M466 57H493" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>

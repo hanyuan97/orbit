@@ -2,7 +2,8 @@
 
 [English](./agent-cli.md) · [繁體中文](./agent-cli.zh-TW.md)
 
-Orbit 的設計初衷就是讓 coding agent 透過 CLI 來驅動。Agent 在需要解析狀態、決定下一步動作，或從錯誤中復原時，應優先選擇結構化輸出，而非給人看的文字格式。
+Coding agent 或 script 可透過 Orbit CLI 的結構化輸出檢查 runtime 狀態、
+處理錯誤。這份契約涵蓋 JSON 回應、log stream、錯誤代碼與建議動作。
 
 自動更新的 policy、release target、defer reason 與 per-runtime outcome 會以 additive
 fields 出現在 `status --json`／`inspect --json`；update transaction 進行期間，這兩個

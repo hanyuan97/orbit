@@ -2,10 +2,9 @@
 
 [English](./instances.md) · [繁體中文](./instances.zh-TW.md)
 
-Orbit's default runtime is intentionally backward compatible: it uses the
-declared host ports, the default daemon socket and dashboard address, and the
-legacy Docker resource names. Use a named instance when multiple checkouts,
-agents, or CI jobs need to run independently on the same machine.
+Use a named instance to run multiple checkouts, agents, or CI jobs independently
+on the same machine. The default runtime uses the declared host ports, the
+default daemon socket and dashboard address, and the legacy Docker resource names.
 
 ## Use a named instance
 

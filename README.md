@@ -60,7 +60,7 @@ This installs the latest published preview release. Orbit installs only its
 own CLI—never a project's runtimes or dependencies; `orbit doctor` reports
 what the selected environment expects and the specific remedy. Upgrade,
 rollback, uninstall, and platform details are in
-[Installation and development](docs/development.md).
+[Installation](docs/installation.md).
 
 ## Dashboard
 

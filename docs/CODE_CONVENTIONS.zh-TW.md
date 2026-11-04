@@ -2,7 +2,7 @@
 
 [English](./CODE_CONVENTIONS.md) · [繁體中文](./CODE_CONVENTIONS.zh-TW.md)
 
-本文件記錄 Orbit 在結構與風格決策上所遵循的原則。寫下來是為了讓未來的貢獻者能做出一致的判斷，而不必去逆向工程整段重構歷史。
+依這些慣例組織 Go 和 Svelte 程式碼、選擇行為測試的範圍，並在提交前檢查變更。
 
 ---
 

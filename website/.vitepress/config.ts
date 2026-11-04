@@ -20,51 +20,82 @@ const untranslatedRoutes = new Set([
   'docs/website',
 ])
 
-const englishGuide = [
-  { text: 'Use Orbit with your project', link: '/docs/local-first' },
-  { text: 'Why Orbit', link: '/docs/why-orbit' },
-  { text: 'Configuration', link: '/docs/configuration' },
-  { text: 'Environment sources', link: '/docs/environment-sources' },
-  { text: 'Isolated runtime instances', link: '/docs/instances' },
-  { text: 'E2E testing', link: '/docs/e2e-testing' },
-  { text: 'Tracing', link: '/docs/tracing' },
-  { text: 'Troubleshooting', link: '/docs/troubleshooting' },
+const englishSidebar = [
+  {
+    text: 'Guides',
+    items: [
+      { text: 'Get started', link: '/docs/local-first' },
+      { text: 'Installation', link: '/docs/installation' },
+      { text: 'Team adoption', link: '/docs/team-adoption' },
+      { text: 'Environment sources', link: '/docs/environment-sources' },
+      { text: 'Instances', link: '/docs/instances' },
+      { text: 'SQL Projects', link: '/docs/sql-workflow' },
+      { text: 'E2E testing', link: '/docs/e2e-testing' },
+      { text: 'Troubleshooting', link: '/docs/troubleshooting' },
+    ],
+  },
+  {
+    text: 'Reference',
+    collapsed: true,
+    items: [
+      { text: 'Why Orbit', link: '/docs/why-orbit' },
+      { text: 'Benchmarks', link: '/docs/benchmarks' },
+      { text: 'Configuration', link: '/docs/configuration' },
+      { text: 'Tracing', link: '/docs/tracing' },
+      { text: 'Tunnel claims', link: '/docs/tunnel-claim' },
+      { text: 'Agent CLI contract', link: '/docs/agent-cli' },
+      { text: 'Architecture', link: '/docs/architecture' },
+      { text: 'Versioning', link: '/docs/versioning' },
+    ],
+  },
+  {
+    text: 'Contributing',
+    collapsed: true,
+    items: [
+      { text: 'Development', link: '/docs/development' },
+      { text: 'Testing strategy', link: '/docs/testing' },
+      { text: 'Code conventions', link: '/docs/CODE_CONVENTIONS' },
+      { text: 'Documentation website', link: '/docs/website' },
+    ],
+  },
 ]
 
-const englishReference = [
-  { text: 'Team adoption', link: '/docs/team-adoption' },
-  { text: 'Agent CLI contract', link: '/docs/agent-cli' },
-  { text: 'Architecture', link: '/docs/architecture' },
-  { text: 'Development', link: '/docs/development' },
-  { text: 'Testing strategy', link: '/docs/testing' },
-  { text: 'Versioning', link: '/docs/versioning' },
-  { text: 'Code conventions', link: '/docs/CODE_CONVENTIONS' },
-  { text: 'Documentation website', link: '/docs/website' },
-]
-
-const traditionalChineseGuide = [
-  { text: '在你的專案使用 Orbit', link: '/zh-TW/docs/local-first' },
-  { text: '為什麼選擇 Orbit', link: '/zh-TW/docs/why-orbit' },
-  { text: '設定參考', link: '/zh-TW/docs/configuration' },
-  { text: '環境來源', link: '/zh-TW/docs/environment-sources' },
-  { text: '隔離的 runtime instances', link: '/zh-TW/docs/instances' },
-  { text: 'E2E 測試', link: '/zh-TW/docs/e2e-testing' },
-  { text: 'Tracing', link: '/zh-TW/docs/tracing' },
-  { text: '疑難排解', link: '/zh-TW/docs/troubleshooting' },
-  { text: '團隊導入', link: '/zh-TW/docs/team-adoption' },
-]
-
-const traditionalChineseOptional = [
-  { text: 'SQL Server database projects', link: '/zh-TW/docs/sql-workflow' },
-  { text: 'Tunnel claims', link: '/zh-TW/docs/tunnel-claim' },
-]
-
-const traditionalChineseReference = [
-  { text: 'Agent CLI contract', link: '/zh-TW/docs/agent-cli' },
-  { text: '架構', link: '/zh-TW/docs/architecture' },
-  { text: '開發', link: '/zh-TW/docs/development' },
-  { text: '版本與相容性', link: '/zh-TW/docs/versioning' },
-  { text: '程式碼慣例', link: '/zh-TW/docs/CODE_CONVENTIONS' },
+const traditionalChineseSidebar = [
+  {
+    text: '使用指南',
+    items: [
+      { text: '開始使用', link: '/zh-TW/docs/local-first' },
+      { text: '安裝與更新', link: '/zh-TW/docs/installation' },
+      { text: '團隊導入', link: '/zh-TW/docs/team-adoption' },
+      { text: '環境來源', link: '/zh-TW/docs/environment-sources' },
+      { text: 'Instances', link: '/zh-TW/docs/instances' },
+      { text: 'SQL Projects', link: '/zh-TW/docs/sql-workflow' },
+      { text: 'E2E 測試', link: '/zh-TW/docs/e2e-testing' },
+      { text: '疑難排解', link: '/zh-TW/docs/troubleshooting' },
+    ],
+  },
+  {
+    text: '參考',
+    collapsed: true,
+    items: [
+      { text: '為什麼選擇 Orbit', link: '/zh-TW/docs/why-orbit' },
+      { text: '效能實測', link: '/zh-TW/docs/benchmarks' },
+      { text: '設定參考', link: '/zh-TW/docs/configuration' },
+      { text: 'Tracing', link: '/zh-TW/docs/tracing' },
+      { text: 'Tunnel claims', link: '/zh-TW/docs/tunnel-claim' },
+      { text: 'Agent CLI contract', link: '/zh-TW/docs/agent-cli' },
+      { text: '架構', link: '/zh-TW/docs/architecture' },
+      { text: '版本與相容性', link: '/zh-TW/docs/versioning' },
+    ],
+  },
+  {
+    text: '參與貢獻',
+    collapsed: true,
+    items: [
+      { text: '開發', link: '/zh-TW/docs/development' },
+      { text: '程式碼慣例', link: '/zh-TW/docs/CODE_CONVENTIONS' },
+    ],
+  },
 ]
 
 function localizedRoute(relativePath: string) {
@@ -127,12 +158,38 @@ export default defineConfig({
   markdown: {
     html: false,
     config(markdown) {
+      // GitHub uses the Markdown language links; the website has a locale switcher.
+      markdown.core.ruler.after('inline', 'hide_document_language_links', ({ tokens }) => {
+        const languageLinks = /^\[English\]\(\.\/([^/()]+)\.md\) · \[繁體中文\]\(\.\/\1\.zh-TW\.md\)$/
+        for (let index = tokens.length - 2; index > 0; index--) {
+          const token = tokens[index]
+          if (
+            token.type === 'inline' &&
+            tokens[index - 1].type === 'paragraph_open' &&
+            tokens[index + 1].type === 'paragraph_close' &&
+            languageLinks.test(token.content)
+          ) {
+            tokens.splice(index - 1, 3)
+            index--
+          }
+        }
+      })
       const renderCode = markdown.renderer.rules.code_inline
       markdown.renderer.rules.code_inline = (tokens, index, options, env, self) => {
         const rendered = renderCode
           ? renderCode(tokens, index, options, env, self)
           : self.renderToken(tokens, index, options)
         return rendered.replaceAll('{', '&#123;').replaceAll('}', '&#125;')
+      }
+      const renderImage = markdown.renderer.rules.image
+      markdown.renderer.rules.image = (tokens, index, options, env, self) => {
+        const token = tokens[index]
+        const source = token.attrGet('src')
+        // Localized includes render under zh-TW/docs, while the assets live beside their Markdown sources.
+        if (localizedRoute(env.relativePath || '').startsWith('zh-TW/docs/') && source?.startsWith('./assets/')) {
+          token.attrSet('src', source.replace('./assets/', '/docs/assets/'))
+        }
+        return renderImage ? renderImage(tokens, index, options, env, self) : self.renderToken(tokens, index, options)
       }
       const renderLink = markdown.renderer.rules.link_open
       markdown.renderer.rules.link_open = (tokens, index, options, env, self) => {
@@ -205,11 +262,7 @@ export default defineConfig({
             ],
           },
         ],
-        sidebar: { '/zh-TW/docs/': [
-          { text: '指南', items: traditionalChineseGuide },
-          { text: '選用工作流程', items: traditionalChineseOptional },
-          { text: '參考與貢獻', items: traditionalChineseReference },
-        ] },
+        sidebar: { '/zh-TW/docs/': traditionalChineseSidebar },
         editLink: {
           pattern: ({ filePath }) => {
             const sourcePath = filePath.replace(/^zh-TW\/docs\/(.+)\.md$/, 'docs/$1.zh-TW.md')
@@ -339,19 +392,7 @@ export default defineConfig({
         ],
       },
     ],
-    sidebar: {
-      '/docs/': [
-        { text: 'Guides', items: englishGuide },
-        {
-          text: 'Optional workflows',
-          items: [
-            { text: 'SQL Server database projects', link: '/docs/sql-workflow' },
-            { text: 'Tunnel claims', link: '/docs/tunnel-claim' },
-          ],
-        },
-        { text: 'Reference and contribution', items: englishReference },
-      ],
-    },
+    sidebar: { '/docs/': englishSidebar },
     search: {
       provider: 'local',
       options: {

@@ -1,12 +1,11 @@
 # Documentation website
 
-Orbit's official website is [orbit.dotw.me](https://orbit.dotw.me/).
-The two homepages are the frontmatter-only pages `index.md` and
-`zh-TW/index.md` at the repository root; their copy lives in
-`website/.vitepress/homepage-copy.ts`, and the prompt they show is owned by
-`docs/local-first.md` (the READMEs repeat the same sentences). The READMEs are
-GitHub-facing and are not rendered on the site. Files in `docs/` remain the
-source for documentation pages. Do not copy documentation into `website/`.
+Edit, preview, and validate the documentation for
+[orbit.dotw.me](https://orbit.dotw.me/).
+
+Edit documentation in `docs/` and keep it there. The homepages are
+`index.md` and `zh-TW/index.md` at the repository root. Both files contain
+only frontmatter. The READMEs are for GitHub.
 
 ## Local workflow
 

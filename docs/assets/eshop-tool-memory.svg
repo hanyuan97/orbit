@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 176" role="img" aria-labelledby="title description">
+  <title id="title">eShop orchestration tooling memory footprint</title>
+  <desc id="description">Aspire 703 MB and Orbit 21 MB in one macOS run.</desc>
+  <style>
+    .panel { fill: #f7f8fc; stroke: #d6dbe7; }
+    .label { fill: #18233a; font: 600 20px system-ui, sans-serif; }
+    .track { fill: #e1e6f0; }
+    .aspire { fill: #6949b5; }
+    .orbit { fill: #246ab3; }
+    @media (prefers-color-scheme: dark) {
+      .panel { fill: #1b2333; stroke: #414d65; }
+      .label { fill: #edf2fc; }
+      .track { fill: #303a50; }
+      .aspire { fill: #b19af5; }
+      .orbit { fill: #82baf8; }
+    }
+  </style>
+  <rect class="panel" x="1" y="1" width="678" height="174" rx="15"/>
+  <g class="label">
+    <text x="28" y="52">Aspire</text>
+    <text x="28" y="119">Orbit</text>
+    <text x="652" y="52" text-anchor="end">703 MB</text>
+    <text x="652" y="119" text-anchor="end">21 MB</text>
+  </g>
+  <!-- Both bars use the same scale. 21 / 703 × 624 rounds to 18.64. -->
+  <rect class="track" x="28" y="65" width="624" height="13" rx="4"/>
+  <rect class="track" x="28" y="132" width="624" height="13" rx="4"/>
+  <rect class="aspire" x="28" y="65" width="624" height="13" rx="4"/>
+  <rect class="orbit" x="28" y="132" width="18.64" height="13" rx="4"/>
+</svg>

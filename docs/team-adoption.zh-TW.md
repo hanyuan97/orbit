@@ -1,58 +1,69 @@
-# 為你的團隊採用 orbit
+# 團隊導入
 
 [English](./team-adoption.md) · [繁體中文](./team-adoption.zh-TW.md)
 
-Orbit 是本地開發協調器：一份 YAML env 檔描述 containers 與 services，`orbit up` 會依照相依順序啟動，並提供 health checks、logs、tracing，以及位於 <http://localhost:19800> 的 dashboard。
+先在自己的電腦跑通一套環境，再請隊友從新的 checkout 重跑。第一套環境只需要
+涵蓋一項開發任務會用到的服務。
 
-這個 repo 包含中性 engine、CLI、daemon、UI，以及透過明確 extension seams 接入的選用功能 packages。團隊一般直接使用已發行的 Orbit binary。Environment repository 是之後的發布方式，不是本機證明 Orbit 是否適用的前置條件。
+## 第一份 YAML
 
-## 純設定採用
+在專案旁建立 `orbit.yaml`，寫下啟動指令、port 和需要的相依服務。如果想先試
+Orbit，可以在裝有 Python 3 的電腦上開一個空資料夾，把以下設定存成
+`orbit.yaml`，再從同一個資料夾執行指令。
 
-1. 先在一個真實專案旁驗證 environment。[local-first
-   指南](local-first.zh-TW.md) 使用 project-root `orbit.yaml`，走過隊友之後也會
-   使用的 `doctor`、`up`、`open`、`logs`、`down` 迴圈；完全不需要 Git
-   environment repository 或永久 Orbit settings。
-2. 確認設定有價值後，再建立 Git repository 與 `envs/dev.yaml`。把
-   `path: .` 這類 project-relative path 改成明確的 `${WORKSPACE_ROOT}` path，
-   commit 後從 project checkout 初始化：
+```yaml
+version: "3"
+services:
+  app:
+    kind: frontend
+    command: python3 -m http.server "$PORT"
+    ports:
+      http: 28080
+```
 
-   ```sh
-   orbit init --source team --url <your-env-repo-git-url> --env dev
-   orbit up
-   ```
+```sh
+orbit doctor
+orbit up
+orbit open app
+```
 
-   Orbit 只會在選到的設定實際引用 `${WORKSPACE_ROOT}` 時詢問 workspace；
-   只有 containers 的 environment 不會暴露這個概念。`orbit doctor` 會檢查
-   每個解析後的 service 目錄，並在 `orbit up` 啟動任何相依資源前只給一個
-   修正指令。
+瀏覽器能開啟本機服務，就跑通了第一份 YAML。試完用 `orbit down` 關閉環境。
+換成自己的專案時，先挑一個能驗證的端點，再加入它需要的容器和服務。
+想請 Agent 幫忙，可以從[本機入門指南](local-first.zh-TW.md)的 prompt 開始。
 
-   Host service 可使用任何本機已安裝的 runtime；只有 `dotnet` 具有特殊的 build 行為：
+## 執行環境設定
 
-   ```yaml
-   services:
-     api:
-       type: python
-       path: ${WORKSPACE_ROOT}/api
-       command: python3 -m http.server 8080
-       ports:
-         http: 8080
-   ```
+![Orbit 啟動服務時，會把 YAML 定義的執行環境設定傳給程式。](./assets/project-runtime-settings.svg)
 
-   開發期間可用 `orbit source add local --path /path/to/your-env-repo` 指向本地、
-   尚未 commit 的 environment files。若目前使用中的 environment 有變更，
-   sync 會詢問是否更新，並且只恢復原先運行中的資源。只有必須延後中斷時才
-   需要 `--no-apply`；Orbit 會印出之後完成更新的精確指令。
+如果程式把服務網址寫死在 staging，即使在本機啟動，請求還是會送到 staging。
+把網址改成啟動時可設定，同一份程式碼就能在本機連本機服務，部署後連 staging。
 
-已發行 binary 會提供 distribution defaults。團隊可用 `orbit source add` 新增 Git 或本機來源；`orbit update` 仍可用 `ORBIT_INSTALL_URL` 設定下載位置。其餘 services、containers、graph、logs、health checks、doctor 與 dashboard 只需 env 設定即可運作。Tracing 預設開啟；env 可用明確的 `tracing.enabled: false` opt out。
+| 要能設定什麼 | 怎麼驗證 |
+| --- | --- |
+| 監聽 port | 讓程式使用 Orbit 傳入的 `$PORT`，就像第一份 YAML。 |
+| 服務或 SDK 端點 | 讓程式或 SDK 讀取 `CATALOG_API_URL` 這類覆寫值。若程式宣告 `depends_on: [catalog-api]`，且該服務有 HTTP 端點，Orbit 可以傳入解析後的 URL。 |
+| 資料庫連線與測試資料 | 讓程式接受本機連線字串。先把 schema 和測試資料準備到指定的測試 DB，再跑會用到它的流程。 |
 
-## 編譯時客製
+實際跑一次會呼叫相依服務的請求，確認它有打到本機。資料庫設定可接著看
+[SQL Server Database Projects](sql-workflow.zh-TW.md)和 [E2E 測試](e2e-testing.zh-TW.md)。
 
-當純設定不夠用時，extension contract 仍然可用。團隊可 fork 這個 repo，或將它作為 Go module require，提供自己的 `cmd/orbit`，並將額外的 `extension.Extension` 傳給 `app.Main`。每個 extension 可提供 CLI commands、daemon setup 與 hooks、doctor 與 init 行為，以及 distribution defaults；請見 [extension/extension.go](https://github.com/iml885203/orbit/blob/main/extension/extension.go)。
+## 環境 Repo
 
-UI build 在 [ui/vite.config.ts](https://github.com/iml885203/orbit/blob/main/ui/vite.config.ts) 保留三個編譯時 seam：
+如果只有一個應用程式 repo，把跑通的 `orbit.yaml` 跟程式碼一起提交。隊友 checkout
+後就能重跑相同指令。如果環境跨多個 repo，可以建一個共享的 Git repo，把設定存成
+`envs/dev.yaml`。用 `path: ${WORKSPACE_ROOT}/api` 這類路徑，並寫清楚隊友需要
+把哪些 repo 放在工作區底下。憑證留在各自的本機設定。
 
-- `ORBIT_UI_EXT` 用團隊的 navigation、routes、panels、settings sections 與 lifecycle hooks 取代 `$ext` module。
-- `ORBIT_UI_TYPES` 取代 generated-types barrel。
-- `ORBIT_UI_OUTDIR` 選擇由團隊 binary embed 的 dashboard build output。
+隊友從工作區根目錄選擇共享環境。執行指令的目錄與上層目錄都應沒有專案的
+`orbit.yaml`，因為 Orbit 會優先讀取這份檔案。
 
-這條路線代表團隊必須自行維護 build 與 release line。只在 env 設定無法表達需求時使用，並將中性改進留在這個 repo，避免複製 core。
+```sh
+orbit init --source team --url https://github.com/example/team-envs.git --env dev
+orbit env info
+orbit doctor
+orbit up
+```
+
+將範例 URL 換成團隊 repo。確認 `orbit env info` 顯示 `team/dev` 後，請隊友重跑
+瀏覽器操作或 API 請求。共享 repo 之後怎麼維護和更新，
+可以接著看[環境來源](environment-sources.zh-TW.md)。

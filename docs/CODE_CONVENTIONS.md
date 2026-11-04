@@ -2,7 +2,8 @@
 
 [English](./CODE_CONVENTIONS.md) · [繁體中文](./CODE_CONVENTIONS.zh-TW.md)
 
-This document captures the principles that guide structure and style decisions in Orbit. It exists so future contributors make the same calls without having to reverse-engineer the refactor history.
+Use these conventions to organize Go and Svelte code, choose where to test
+behavior, and review changes before committing.
 
 ---
 

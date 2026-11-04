@@ -30,11 +30,11 @@ export const homepageCopy: Record<HomepageLocale, HomepageCopy> = {
     promptLabel: 'paste into your coding agent',
     copyButton: { idle: 'Copy', copied: 'Copied', failed: 'Copy failed, select the text' },
     getStartedId: 'get-started',
-    install: { prefix: 'Or', others: 'Windows (Scoop) and other installers', href: '/docs/development#install-orbit' },
+    install: { prefix: 'Or', others: 'Windows (Scoop) and other installers', href: '/docs/installation#install-orbit' },
     columnsLabel: 'How Orbit works',
     columns: [
       { eyebrow: '01 · MAP', title: 'One contract for every repo', body: 'Services, containers, dependencies and health in one orbit.yaml. Agents read it as JSON, you read it as a graph.' },
-      { eyebrow: '02 · SLICE', title: 'Only what the ticket needs', body: 'Start one group or service with its dependencies, in its own instance. Nothing else starts.' },
+      { eyebrow: '02 · SLICE', title: 'Only what the feature needs', body: 'Start one group or service with its dependencies, in its own instance. Nothing else starts.' },
       { eyebrow: '03 · PROOF', title: 'Ready means a real flow passes', body: 'Health checks gate dependents, and the agent runs the flow before it writes code.' },
     ],
     film: {
@@ -55,11 +55,11 @@ export const homepageCopy: Record<HomepageLocale, HomepageCopy> = {
     promptLabel: '貼給你的 coding agent',
     copyButton: { idle: '複製', copied: '已複製', failed: '複製失敗，請直接選取文字' },
     getStartedId: '開始使用',
-    install: { prefix: '或', others: 'Windows (Scoop) 與其他安裝方式', href: '/zh-TW/docs/development#安裝-orbit' },
+    install: { prefix: '或', others: 'Windows (Scoop) 與其他安裝方式', href: '/zh-TW/docs/installation#安裝-orbit' },
     columnsLabel: 'Orbit 怎麼運作',
     columns: [
       { eyebrow: '01 · MAP', title: '每個 repo 共用一份契約', body: '服務、容器、依賴和健康檢查都在一份 orbit.yaml。agent 讀到的是 JSON，你看到的是一張圖。' },
-      { eyebrow: '02 · SLICE', title: '只跑這張 ticket 需要的', body: '啟動一個 group 或一個服務和它的依賴，在自己的 instance 裡。其他什麼都不會動。' },
+      { eyebrow: '02 · SLICE', title: '只跑這個 feature 需要的', body: '啟動一個 group 或一個服務和它的依賴，在自己的 instance 裡。其他什麼都不會動。' },
       { eyebrow: '03 · PROOF', title: 'ready 代表真的流程跑得過', body: '健康檢查擋住依賴它的服務；agent 寫 code 之前會先把流程跑一遍。' },
     ],
     film: {

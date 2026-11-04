@@ -2,9 +2,9 @@
 
 [English](./agent-cli.md) · [繁體中文](./agent-cli.zh-TW.md)
 
-Orbit is designed to be driven by coding agents through the CLI. Agents should
-prefer structured output over human-formatted text whenever they need to parse
-state, decide next actions, or recover from errors.
+Use Orbit's structured CLI output to inspect runtime state and recover from
+errors in a coding agent or script. This contract defines JSON responses, log
+streams, error codes, and recommended actions.
 
 ## Rule of Thumb
 

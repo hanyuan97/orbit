@@ -2,9 +2,9 @@
 
 [English](./instances.md) · [繁體中文](./instances.zh-TW.md)
 
-Orbit 的 default runtime 刻意保持向後相容：使用宣告的 host ports、預設 daemon
-socket 與 dashboard address，以及舊有 Docker resource names。同一台機器上的多個
-checkout、agent 或 CI job 需要獨立執行時，請使用 named instance。
+同一台機器上的多個 checkout、agent 或 CI job 需要獨立執行時，請使用
+named instance。預設 runtime 使用宣告的 host port、預設 daemon socket 和
+dashboard 位址，以及既有的 Docker 資源名稱。
 
 ## 使用 named instance
 

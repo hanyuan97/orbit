@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 430" role="img" aria-labelledby="title desc">
+  <title id="title">Service state machine</title>
+  <desc id="desc">Pending can build or start. Build or health failures can degrade a resource; successful probes recover it. Stopping leads to Stopped.</desc>
+  <style>
+    .canvas { fill: #f6f8fa; }
+    .node { fill: #ffffff; stroke: #d0d7de; }
+    .label { fill: #1f2328; }
+    .detail { fill: #59636e; }
+    .connector { stroke: #0969da; }
+    .arrowhead { fill: #0969da; }
+    .edge-label { font-size: 17px; }
+    @media (prefers-color-scheme: dark) {
+      .canvas { fill: #161b22; }
+      .node { fill: #1c2128; stroke: #30363d; }
+      .label { fill: #e6edf3; }
+      .detail { fill: #a4aeba; }
+      .connector { stroke: #58a6ff; }
+      .arrowhead { fill: #58a6ff; }
+    }
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5Z" class="arrowhead"/></marker></defs>
+  <rect width="720" height="430" rx="16" class="canvas"/>
+  <g font-family="system-ui, sans-serif">
+    <rect x="27" y="25" width="190" height="57" rx="10" class="node"/>
+    <text x="122.0" y="61" text-anchor="middle" font-size="21" font-weight="600" class="label">Pending</text>
+    <rect x="265" y="25" width="190" height="57" rx="10" class="node"/>
+    <text x="360.0" y="61" text-anchor="middle" font-size="21" font-weight="600" class="label">Building</text>
+    <rect x="503" y="25" width="190" height="57" rx="10" class="node"/>
+    <text x="598.0" y="61" text-anchor="middle" font-size="21" font-weight="600" class="label">Starting</text>
+    <path d="M222 53H260" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M460 53H498" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M122 88V107H566V88" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="223" y="128" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Start without a build</text>
+    <rect x="27" y="200" width="190" height="57" rx="10" class="node"/>
+    <text x="122.0" y="236" text-anchor="middle" font-size="21" font-weight="600" class="label">Healthy</text>
+    <rect x="503" y="200" width="190" height="57" rx="10" class="node"/>
+    <text x="598.0" y="236" text-anchor="middle" font-size="21" font-weight="600" class="label">Degraded</text>
+    <path d="M598 88V194" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="645" y="167" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Failure</text>
+    <path d="M360 88V153H482V193H503" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="427" y="146" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Build failed</text>
+    <path d="M524 88V171H122V194" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="293" y="163" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Health OK</text>
+    <path d="M223 219H496" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="360" y="210" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Health or runtime failure</text>
+    <path d="M496 240H223" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="360" y="265" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Recovery probe succeeds</text>
+    <path d="M33 194V90" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="79" y="159" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Restart</text>
+    <rect x="265" y="320" width="190" height="57" rx="10" class="node"/>
+    <text x="360.0" y="356" text-anchor="middle" font-size="21" font-weight="600" class="label">Stopping</text>
+    <rect x="503" y="320" width="190" height="57" rx="10" class="node"/>
+    <text x="598.0" y="356" text-anchor="middle" font-size="21" font-weight="600" class="label">Stopped</text>
+    <path d="M122 263V348H259" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M598 263V286H360V314" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="442" y="306" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Stop</text>
+    <path d="M460 348H497" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+</svg>

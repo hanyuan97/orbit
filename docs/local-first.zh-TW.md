@@ -7,19 +7,12 @@
 > 閱讀 https://orbit.dotw.me，幫我建立一個可以在本機驗證我的修改的環境。
 > 你可以安裝 Orbit CLI 和 plugin；要安裝其他東西先問我。
 
-Agent 會理解現有 setup、啟動預期的本機環境、驗證代表性的 application 行為，
-並回報仍需要你處理的事項。你不必先選安裝方式或學習 Orbit。
+Agent 會建立專案的 `orbit.yaml`、啟動環境，並驗證一個應用程式請求或測試。
 
-## Agent 會讀什麼
+## 第一份 YAML
 
-Agent 依照公開的 Orbit skill 行動：<https://orbit.dotw.me/agent/SKILL.md>，
-網站導覽列的「給 Agent」也連到同一份。簡單說：它會安裝官方 Orbit CLI 與 plugin，
-其他東西都先問再裝；它會把專案現有的 setup 寫成專案內的 `orbit.yaml`，而不是跑公開
-demo；接著啟動環境，
-並證明代表性的 application 流程真的有回應，才回報結果。那份 skill 才是這個流程的
-權威描述，本頁只負責指過去。
+想手動設定，可以先[安裝 Orbit](installation.zh-TW.md#安裝-orbit)，再[跑通第一份 YAML](team-adoption.zh-TW.md#第一份-yaml)。
 
-想手動操作，請見[安裝](development.zh-TW.md)、
-[設定參考](configuration.zh-TW.md)與
-[可執行範例](https://github.com/iml885203/orbit/tree/main/docs/examples/local-first)。
-要建立共享 environment repository，請見[團隊導入](team-adoption.zh-TW.md)。
+## Agent Skill
+
+[Orbit Skill](https://orbit.dotw.me/agent/SKILL.md) 說明 Agent 在回報環境就緒前會做哪些檢查。

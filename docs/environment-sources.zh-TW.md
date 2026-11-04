@@ -2,10 +2,10 @@
 
 [English](./environment-sources.md) · [繁體中文](./environment-sources.zh-TW.md)
 
-Environment source 是含有 `envs/` 的 Git repository 或本機目錄。只需新增
-一次，之後想取得最新 environments 時執行同步。受管理 environment 使用
-`<source>/<environment>` 身分；裸名稱來自第一個 source。Project `orbit.yaml`
-與明確 `-c <path>` config 仍然獨立。
+新增 environment source，就能使用並同步 Git repository 或本機目錄
+`envs/` 裡的環境。用 `<source>/<environment>` 選擇指定來源的環境，
+或用環境名稱選擇第一個 source 的環境。專案的 `orbit.yaml` 與透過
+`-c <path>` 指定的設定檔各自獨立。
 
 ## 新增 sources
 
@@ -27,8 +27,7 @@ orbit source sync --all
 orbit source remove env-dev
 ```
 
-指令只有 `add`、`list`、`sync` 與 `remove`。若要更換 source 位置，
-移除後重新新增即可；Git 與本機 source 使用同一套流程。
+若要更換 source 的位置，先移除再重新新增。Git 與本機 source 使用同一套流程。
 
 同步會先驗證 staged cache，再替換 current cache。失敗時保留最後有效的
 environments，錯誤會留在 source 狀態；舊 cache versions 保存在 Orbit 管理的

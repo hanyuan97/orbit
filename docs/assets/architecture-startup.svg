@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" role="img" aria-labelledby="title desc">
+  <title id="title">Startup sequence</title>
+  <desc id="desc">Orbit validates configuration and dependencies, dispatches startup, then waits for health. The daemon releases dependents as their dependencies become healthy.</desc>
+  <style>
+    .canvas { fill: #f6f8fa; }
+    .node { fill: #ffffff; stroke: #d0d7de; }
+    .label { fill: #1f2328; }
+    .detail { fill: #59636e; }
+    .connector { stroke: #0969da; }
+    .arrowhead { fill: #0969da; }
+    .edge-label { font-size: 17px; }
+    @media (prefers-color-scheme: dark) {
+      .canvas { fill: #161b22; }
+      .node { fill: #1c2128; stroke: #30363d; }
+      .label { fill: #e6edf3; }
+      .detail { fill: #a4aeba; }
+      .connector { stroke: #58a6ff; }
+      .arrowhead { fill: #58a6ff; }
+    }
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5Z" class="arrowhead"/></marker></defs>
+  <rect width="720" height="320" rx="16" class="canvas"/>
+  <g font-family="system-ui, sans-serif">
+    <rect x="28" y="20" width="245" height="57" rx="10" class="node"/>
+    <text x="150.5" y="44" text-anchor="middle" font-size="21" font-weight="600" class="label">orbit up</text>
+    <text x="150.5" y="64" text-anchor="middle" font-size="16" font-weight="400" class="detail">Ensure daemon is running</text>
+    <rect x="423" y="20" width="269" height="57" rx="10" class="node"/>
+    <text x="557.5" y="44" text-anchor="middle" font-size="21" font-weight="600" class="label">Daemon</text>
+    <text x="557.5" y="64" text-anchor="middle" font-size="16" font-weight="400" class="detail">POST /api/up</text>
+    <path d="M280 49H416" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M558 83V105" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="423" y="111" width="269" height="57" rx="10" class="node"/>
+    <text x="557.5" y="135" text-anchor="middle" font-size="21" font-weight="600" class="label">Load configuration</text>
+    <text x="557.5" y="155" text-anchor="middle" font-size="16" font-weight="400" class="detail">Build dependency graph</text>
+    <path d="M558 174V196" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="423" y="202" width="269" height="57" rx="10" class="node"/>
+    <text x="557.5" y="226" text-anchor="middle" font-size="21" font-weight="600" class="label">Dispatch startup</text>
+    <text x="557.5" y="246" text-anchor="middle" font-size="16" font-weight="400" class="detail">Start services without dependencies</text>
+    <path d="M416 230H279" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="28" y="202" width="245" height="57" rx="10" class="node"/>
+    <text x="150.5" y="226" text-anchor="middle" font-size="21" font-weight="600" class="label">Status stream</text>
+    <text x="150.5" y="246" text-anchor="middle" font-size="16" font-weight="400" class="detail">Observe readiness</text>
+    <text x="360" y="297" text-anchor="middle" font-size="21" font-weight="500" class="detail">Health check passes → start dependent services</text>
+  </g>
+</svg>

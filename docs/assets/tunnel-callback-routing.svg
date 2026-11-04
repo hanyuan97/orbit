@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" role="img" aria-labelledby="title desc">
+  <title id="title">Tunnel callback routing</title>
+  <desc id="desc">Third-party callbacks arrive at Tunlease. Unclaimed paths go to the origin; claimed paths travel through Orbit’s outgoing tunnel to the local service.</desc>
+  <style>
+    .canvas { fill: #f6f8fa; }
+    .node { fill: #ffffff; stroke: #d0d7de; }
+    .label { fill: #1f2328; }
+    .detail { fill: #59636e; }
+    .connector { stroke: #0969da; }
+    .arrowhead { fill: #0969da; }
+    .edge-label { font-size: 17px; }
+    @media (prefers-color-scheme: dark) {
+      .canvas { fill: #161b22; }
+      .node { fill: #1c2128; stroke: #30363d; }
+      .label { fill: #e6edf3; }
+      .detail { fill: #a4aeba; }
+      .connector { stroke: #58a6ff; }
+      .arrowhead { fill: #58a6ff; }
+    }
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5Z" class="arrowhead"/></marker></defs>
+  <rect width="720" height="340" rx="16" class="canvas"/>
+  <g font-family="system-ui, sans-serif">
+    <rect x="245" y="15" width="230" height="57" rx="10" class="node"/>
+    <text x="360.0" y="39" text-anchor="middle" font-size="21" font-weight="600" class="label">Third-party provider</text>
+    <text x="360.0" y="59" text-anchor="middle" font-size="16" font-weight="400" class="detail">Stable callback URL</text>
+    <path d="M360 77V100" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <rect x="245" y="106" width="230" height="57" rx="10" class="node"/>
+    <text x="360.0" y="142" text-anchor="middle" font-size="21" font-weight="600" class="label">Tunlease gateway</text>
+    <path d="M303 168V200H150V230" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="163" y="189" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Unclaimed path</text>
+    <path d="M419 168V200H558V230" fill="none" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="516" y="189" text-anchor="middle" font-size="17" font-weight="500" class="detail edge-label">Claimed path</text>
+    <rect x="35" y="236" width="230" height="57" rx="10" class="node"/>
+    <text x="150.0" y="260" text-anchor="middle" font-size="21" font-weight="600" class="label">Origin</text>
+    <text x="150.0" y="280" text-anchor="middle" font-size="16" font-weight="400" class="detail">Existing staging service</text>
+    <rect x="443" y="236" width="230" height="57" rx="10" class="node"/>
+    <text x="558.0" y="260" text-anchor="middle" font-size="21" font-weight="600" class="label">Orbit daemon</text>
+    <text x="558.0" y="280" text-anchor="middle" font-size="16" font-weight="400" class="detail">Access-log proxy → local app</text>
+    <path d="M677 260H701V135H481" fill="none" class="connector" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#arrow)"/>
+    <text x="360" y="319" text-anchor="middle" font-size="18" font-weight="500" class="detail">Dashed line: Orbit opens the reverse tunnel</text>
+  </g>
+</svg>

@@ -2,35 +2,12 @@
 
 [English](./architecture.md) · [繁體中文](./architecture.zh-TW.md)
 
-這份文件說明 Orbit 內部的組件如何串接，讓你不用重讀整個 codebase 也能擴充、除錯或 audit。
+從 CLI 指令一路看懂 daemon、runtime 事件與 dashboard 的關係。
+透過元件對照與狀態機排查服務行為，或找到擴充 Orbit 的位置。
 
 ## Overview
 
-```mermaid
-flowchart TB
-    subgraph Clients["User-facing"]
-        CLI["orbit CLI<br/>(thin client)"]
-        UI["Dashboard<br/>(Svelte 5, :19800)"]
-    end
-
-    subgraph Daemon["orbit daemon (single long-running process)"]
-        API["HTTP API<br/>unix socket + :19800"]
-        Orch["Orchestrator<br/>event loop + state machine"]
-        API <--> Orch
-    end
-
-    subgraph Managed["Managed workloads"]
-        Containers["Containers<br/>SQL Server, Redis, Kafka, Mongo"]
-        Processes["Dev processes<br/>dotnet watch, pnpm dev"]
-    end
-
-    CLI -->|HTTP over unix socket| API
-    UI -->|HTTP + SSE| API
-    Orch -->|Docker SDK| Containers
-    Orch -->|exec + process groups| Processes
-    Containers -.->|health / drift events| Orch
-    Processes -.->|exit / log events| Orch
-```
+![CLI 與 Dashboard 連到同一個 daemon，由它管理容器與本機程序。](./assets/architecture-overview.svg)
 
 三個要先記在腦袋裡的概念:
 
@@ -63,23 +40,7 @@ CLI(`app` package，由各 binary 的薄 `cmd/orbit/main.go` 接線)是 daemon �
 
 每個 service 與 container 都會走過同一組狀態。Transition 由 orchestrator event 驅動。
 
-```mermaid
-stateDiagram-v2
-    [*] --> Pending
-    Pending --> Starting: DepsReady
-    Pending --> Building: build step declared
-    Building --> Starting: BuildComplete
-    Building --> Degraded: BuildFailed
-    Starting --> Healthy: HealthOK
-    Starting --> Degraded: HealthFail / ProcessExited / ContainerDrift
-    Healthy --> Degraded: HealthFail / ProcessExited / ContainerDrift
-    Healthy --> Pending: user restart (從 Pending 重新進入 DAG)
-    Healthy --> Stopping: Shutdown / user stop
-    Degraded --> Healthy: HealthOK (recovery probing)
-    Degraded --> Stopping: Shutdown / user stop
-    Stopping --> Stopped
-    Stopped --> [*]
-```
+![服務由 Pending 進入建置或啟動，依健康狀態進入 Healthy 或 Degraded，最後停止。](./assets/architecture-service-states.svg)
 
 State 常數定義在 `internal/engine/state.go`，以 `ServiceState`(iota enum:`StatePending`、`StateBuilding`、`StateStarting`、`StateHealthy`、`StateDegraded`、`StateStopping`、`StateStopped`、`StateRestarting`)呈現。請使用這些常數 —— 純字串只會出現在 JSON 輸出。（`StateRestarting` 仍為 wire／String 相容而保留，但目前的 lifecycle 會讓 restart 直接回到 `Pending`，而不是停留在它 —— 見上方 state 圖。）
 
@@ -103,34 +64,7 @@ Orchestrator 跑一條 goroutine，從 buffered channel 消費事件。事件定
 
 ## Startup sequence
 
-```mermaid
-sequenceDiagram
-    participant CLI as orbit up
-    participant D as Daemon
-    participant Cfg as Config Loader
-    participant DAG as Dependency DAG
-    participant Orch as Orchestrator
-    participant Svc as Service
-    participant HC as Health Checker
-
-    CLI->>D: ensure daemon running
-    CLI->>D: POST /api/up
-    D->>Cfg: Load(configPath)
-    Cfg-->>D: typed schema
-    D->>DAG: build(services, containers)
-    DAG-->>D: topological order
-    D->>Orch: run(order) — 派發,不阻塞
-    D-->>CLI: 200 OK（受影響 resources + 派發結果）—— 立即回應
-    Note over Orch,HC: 收斂在背景繼續；CLI/dashboard 透過 SSE / orbit status 觀察
-    Orch->>Svc: start (no deps)
-    Svc-->>Orch: started
-    Orch->>HC: probe()
-    HC-->>Orch: HealthOK
-    Orch->>Svc: start (deps now ready)
-    Svc-->>Orch: started
-    Orch->>HC: probe()
-    HC-->>Orch: HealthOK
-```
+![Orbit 載入設定並派送啟動，健康檢查通過後再啟動相依服務。](./assets/architecture-startup.svg)
 
 `POST /api/up` 在啟動被*派發*出去時就回應（`handlers_service.go` 呼叫 `StartServices` 後立即回），不是等全部 healthy 才回 —— CLI/dashboard 透過 SSE status 串流觀察收斂。Service 只要宣告的相依到達 `Healthy` 就會被拉起。DAG 本身不會阻塞 —— 互不相依的 service 是並行啟動的；唯一例外是未啟用 watch 的 .NET service build，它們共用一個可感知 context 的 admission gate。每個依序完成建置的 service，其 runtime process 仍會各自立即啟動。
 

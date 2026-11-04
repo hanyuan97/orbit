@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 218" role="img" aria-labelledby="title desc">
+  <title id="title">Shared SQL Server, separate databases</title>
+  <desc id="desc">The development app connects to app_dev and the test app connects to app_e2e, on the same Orbit-managed SQL Server.</desc>
+  <style>
+    .canvas { fill: #f6f8fa; }
+    .node { fill: #ffffff; stroke: #d0d7de; }
+    .label { fill: #1f2328; }
+    .detail { fill: #59636e; }
+    .connector { stroke: #0969da; }
+    .arrowhead { fill: #0969da; }
+    @media (prefers-color-scheme: dark) {
+      .canvas { fill: #161b22; }
+      .node { fill: #1c2128; stroke: #30363d; }
+      .label { fill: #e6edf3; }
+      .detail { fill: #a4aeba; }
+      .connector { stroke: #58a6ff; }
+      .arrowhead { fill: #58a6ff; }
+    }
+  </style>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0l10 5-10 5Z" class="arrowhead"/></marker></defs>
+  <rect width="720" height="218" rx="16" class="canvas"/>
+  <g font-family="system-ui,sans-serif" text-anchor="middle">
+    <rect x="333" y="14" width="359" height="190" rx="12" class="node"/>
+    <text x="512" y="43" font-size="21" font-weight="600" class="label">Shared SQL Server</text>
+    <rect x="29" y="63" width="218" height="52" rx="9" class="node"/>
+    <text x="138" y="95" font-size="21" font-weight="600" class="label">Development app</text>
+    <rect x="29" y="130" width="218" height="52" rx="9" class="node"/>
+    <text x="138" y="162" font-size="21" font-weight="600" class="label">E2E test app</text>
+    <rect x="382" y="63" width="261" height="52" rx="9" class="canvas"/>
+    <text x="512" y="95" font-size="21" font-weight="600" class="label">app_dev</text>
+    <rect x="382" y="130" width="261" height="52" rx="9" class="canvas"/>
+    <text x="512" y="162" font-size="21" font-weight="600" class="label">app_e2e</text>
+  </g>
+  <path d="M255 89H372" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M255 156H372" class="connector" stroke-width="2" marker-end="url(#arrow)"/>
+</svg>

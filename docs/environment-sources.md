@@ -2,11 +2,10 @@
 
 [English](./environment-sources.md) · [繁體中文](./environment-sources.zh-TW.md)
 
-An environment source is a Git repository or local directory containing
-`envs/`. Add it once, then sync it whenever you want the latest environments.
-Managed environments use `<source>/<environment>` identities; bare names come
-from the first source. Project `orbit.yaml` and explicit `-c <path>` configs
-remain independent.
+Add an environment source to use and sync environments from a Git repository
+or local directory containing `envs/`. Select a managed environment by
+`<source>/<environment>`, or use its bare name to select it from the first
+source. Project `orbit.yaml` and explicit `-c <path>` configs remain independent.
 
 ## Add sources
 
@@ -32,9 +31,8 @@ orbit source sync --all
 orbit source remove env-dev
 ```
 
-The command set is `add`, `list`, `sync`, and `remove`. To change a
-source's location, remove it and add it again. Git and local sources use the
-same workflow.
+To change a source's location, remove it and add it again. Git and local
+sources use the same workflow.
 
 Sync validates a staged cache before replacing the current cache. Failures
 preserve the last valid environments and remain visible in source status.

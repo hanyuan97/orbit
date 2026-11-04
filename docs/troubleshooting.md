@@ -2,7 +2,16 @@
 
 [English](./troubleshooting.md) · [繁體中文](./troubleshooting.zh-TW.md)
 
-Common failure modes, what they mean, and how to fix them. Start with `orbit doctor` — it catches most setup issues and prints the relevant fix.
+Start with `orbit doctor` to check your setup and see suggested fixes. If the
+problem persists, find the symptom or error below for the next step.
+
+| Symptom | Where to look |
+| --- | --- |
+| Startup stalls, health checks fail, or a port is in use | [Startup](#startup) |
+| Database unavailable, publish fails, or objects are missing | [SQL Server](#sql-server) |
+| Daemon unreachable, Dashboard won't open, or update pending | [Daemon](#daemon) |
+| Orbit directory is read-only or a container is missing | [Permissions](#file-system-permissions) · [CLI](#cli) |
+| Need logs or more context | [Diagnosis](#diagnosis) |
 
 ## Startup
 
@@ -23,18 +32,10 @@ The container started but the health check never succeeded.
 - **Rosetta emulation on Apple Silicon**: any container with `platform: linux/amd64` runs under Rosetta — expect ~2× startup time. Check `docker inspect --format '{{.Platform}}'`.
 
 ### `port already in use`
-Another process is holding the port Orbit wants.
 
-Orbit reconciles its own namespaced containers and persisted host processes
-automatically, including after an abrupt daemon exit. This message therefore
-means the current owner could not be matched to the selected Orbit
-environment; you do not need to manually clean up normal Orbit resources.
-
-Orbit names the affected resource and port and prints one read-only command to
-inspect the current owner. Stop that process through the tool that owns it, or
-change the resource's host port in the shared environment, then run
-`orbit up` again. Fetching container logs or blindly restarting the resource
-cannot release a host port owned by another process.
+Run the inspection command Orbit prints to identify the process using the
+port. Stop that process or change the environment's host port, then run
+`orbit up` again.
 
 ### Private registry `pull unauthorized` / `pull access denied`
 Your Docker client can't pull the image. The neutral `orbit doctor` verifies Docker availability but does not probe private registries. Authenticate with your registry provider, for example:
@@ -127,6 +128,13 @@ docker volume rm <volume-name>
 orbit up <sqlserver.target>
 ```
 
+### `orbit sqlserver publish` reports unavailable SQL Server credentials
+
+Check that `sqlserver.password_env` names a non-empty environment key on the
+configured target container, then restart that target with `orbit restart
+<target>`. Orbit does not accept a second password override because that could
+silently connect to a different target than the active environment declares.
+
 ## Daemon
 
 ### `orbit daemon status` says running but `orbit up` can't reach it
@@ -138,10 +146,14 @@ orbit daemon status   # or: orbit up
 
 If that still fails, remove the files manually as a fallback:
 
+::: details Manual cleanup
+
 ```bash
 rm ~/.orbit/orbit.sock ~/.orbit/orbit.pid
 orbit daemon start
 ```
+
+:::
 
 ### Dashboard port :19800 won't open
 Orbit normally chooses another available port automatically, and `orbit open`
@@ -178,13 +190,6 @@ sudo chown -R $(whoami) ~/.orbit
 ### `orbit exec` complains the container name doesn't exist
 Orbit's default naming is `orbit-<service>`. If you set `ORBIT_NAMESPACE=foo`, the name becomes `foo-<service>`. Check `docker ps --format '{{.Names}}'`.
 
-### `orbit sqlserver publish` reports unavailable SQL Server credentials
-
-Check that `sqlserver.password_env` names a non-empty environment key on the
-configured target container, then restart that target with `orbit restart
-<target>`. Orbit does not accept a second password override because that could
-silently connect to a different target than the active environment declares.
-
 ## Diagnosis
 
 When stuck:
@@ -201,5 +206,5 @@ If you find a failure mode that isn't covered here, add it and open a PR — the
 
 - [docs/architecture.md](architecture.md) — event model and state machine background
 - [docs/configuration.md](configuration.md) — YAML field reference
-- [docs/development.md](development.md) — development setup and workflows
+- [Installation](installation.md) — installation and upgrades
 - [docs/sql-workflow.md](sql-workflow.md) — deeper SQL-specific flows

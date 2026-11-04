@@ -1,8 +1,9 @@
 # Versioning and compatibility
 
-Orbit CLI uses [Semantic Versioning](https://semver.org/). Its candidate
-version lives in the root `VERSION` file. The bundled `plugins/orbit` plugin
-versions independently so skill-only changes do not force a CLI release.
+Check what Orbit versions mean and which contracts are stable. The CLI follows
+[Semantic Versioning](https://semver.org/), and its candidate version lives in
+the root `VERSION` file. The bundled `plugins/orbit` plugin versions independently
+so skill-only changes can ship on their own.
 
 ## Release sequence
 

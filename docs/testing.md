@@ -1,7 +1,6 @@
 # Testing strategy
 
-Orbit optimizes for confidence in user-visible behavior, not test count or
-statement coverage. The default shape is a testing trophy:
+Choose the test level that proves the behavior you are changing:
 
 1. A small set of end-to-end journeys proves the installed binary works with
    real Git repositories, files, processes, HTTP, and containers.

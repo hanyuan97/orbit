@@ -2,11 +2,10 @@
 
 [English](./configuration.md) · [繁體中文](./configuration.zh-TW.md)
 
-Full YAML schema for an Orbit environment file. A project may keep
-`orbit.yaml` beside its code, or a team may distribute files through
-`~/.orbit/envs/` and select one with `orbit switch <name>`. See
-[the repository example](https://github.com/iml885203/orbit/blob/main/envs/example.yaml)
-for a larger runnable environment.
+Use this reference to write or update an Orbit environment file. It covers
+config selection and every field in the `orbit.yaml` schema. For a larger
+runnable environment, see the
+[repository example](https://github.com/iml885203/orbit/blob/main/envs/example.yaml).
 
 **Contents**
 

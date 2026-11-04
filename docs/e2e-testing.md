@@ -1,12 +1,11 @@
-# Using Orbit under an E2E test suite
+# E2E Testing
 
 [English](./e2e-testing.md) · [繁體中文](./e2e-testing.zh-TW.md)
 
-Orbit's job in an E2E setup is deliberately small: provide the shared
-infrastructure, and answer questions about it truthfully. The test harness
-layers everything test-specific on top and never reconfigures the machine.
+Use Orbit to start the database, cache, and broker for E2E tests. The test
+harness prepares its own data and checks the environment before running.
 
-## The layering pattern
+## Infrastructure and Test Data
 
 Split the stack into three layers with different owners:
 
@@ -16,13 +15,20 @@ Split the stack into three layers with different owners:
 | Test data (a dedicated database or schema) | the test harness | disposable, reset between scenarios |
 | System under test (the app runtime) | the test harness | started per run with a test profile |
 
-The infrastructure a developer already runs is the same infrastructure the
-suite uses. The suite does not start its own copy; it creates its own
-database on the shared server, points its own app runtime at it, and cleans
-that data through the application (a test-only reset endpoint is orders of
-magnitude faster than any infrastructure-level restore).
+### Database Isolation
 
-## Verify the substrate — never switch it
+![The development app connects to app_dev and the test app connects to app_e2e on the same SQL Server.](./assets/e2e-shared-infrastructure.svg)
+
+Point the development app at `app_dev` and the test profile at `app_e2e`.
+Set the database name in each app's connection configuration. If you use a
+SQL Project, configure `app_e2e` as a publish target, run
+`orbit sqlserver publish app_e2e`, then seed the test data. Before resetting,
+abort unless the resolved database is `app_e2e`. Use separate listen ports when both apps run side by side.
+
+See [SQL Projects](sql-workflow.md) for how to publish a
+local SQL Project.
+
+## Readiness Checks
 
 `orbit switch` stops running resources and restarts the daemon. It is a
 machine-wide provisioning step: correct in a pipeline's setup stage or typed
@@ -50,7 +56,7 @@ lists each resource that did not become healthy with its state, reason, and a
 bounded log tail. A CI log gets the explanation without a second command. See
 [the agent CLI contract](agent-cli.md) for the payload shapes.
 
-## Running a second stack on one machine
+## Instances
 
 For a dedicated runner or a second stack beside a development environment,
 give the run a unique named instance:

@@ -57,7 +57,7 @@ irm https://raw.githubusercontent.com/iml885203/orbit/main/scripts/install.ps1 |
 這會安裝最新發布的 preview release。Orbit 只安裝自己的 CLI，不會安裝專案的
 runtimes 或 dependencies；`orbit doctor` 會回報所選 environment 需要什麼與
 明確的修復方式。升級、rollback、移除與平台細節請見
-[安裝與開發](docs/development.zh-TW.md)。
+[安裝與更新](docs/installation.zh-TW.md)。
 
 ## Dashboard
 

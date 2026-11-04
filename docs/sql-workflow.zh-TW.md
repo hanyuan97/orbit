@@ -1,74 +1,37 @@
-# SQL Server Database Projects
+# SQL Projects
 
 [English](./sql-workflow.md) · [繁體中文](./sql-workflow.zh-TW.md)
 
-這組 command 命名為 `orbit sqlserver`，因為這個 optional workflow 實作的是
-SQL Server Database Project semantics，不是 Orbit 的 generic database
-abstraction。Redis、MongoDB 與 PostgreSQL 的 client convenience 仍放在
-`orbit query`。
+Orbit 的選用 SQL Server 功能讓你預覽 SQL Project（`.sqlproj`）的變更，
+再套用到本機資料庫。Pull 後先跑 `diff`，需要更新本機結構時再跑 `publish`。
 
-Environment 只有在明確啟用 `sqlserver` 時，才會出現五個 Database Project
-指令：`list`、`diff`、`publish`、`reset`、`query`。其他 environment 不會顯示
-這套 workflow。
-Publish 全程在 host 上進行。Orbit 通常用 `dotnet build` 建置 SQL project，
-再用 `sqlpackage` 把 dacpac 推到設定指定的 SQL Server target；單次執行也
-可以改用預先建置的 dacpac。快速 reset 的
-底層機制由 Orbit 自己管理。
+在[環境設定](configuration.zh-TW.md#sqlserver)啟用 `sqlserver` 即可使用。
 
-## Volume 與持久化模型
+## Schema Diff
 
-環境設定應把持久化儲存空間掛在 `/var/opt/mssql`；SQL Server 會在那裡寫入
-`.mdf` / `.ldf` 檔案。有這個 mount 時，你累積的 schema 與資料會在以下
-情境之間保留：
+![Orbit 先檢查已記錄的狀態。DeployReport 則將 DACPAC 與本機資料庫比對。](./assets/sql-schema-check.svg)
 
-- `orbit restart <sqlserver.target>`
-- Docker daemon 重啟
-- 主機重新開機
-- `orbit down` 之後再 `orbit up`
+Pull 後先跑 `orbit sqlserver diff AppDB`。例如，快速檢查列出新增的
+`GetOrder.sql`，就知道上次 publish 後有來源檔案變更。要看資料庫會受什麼
+影響，再跑 `orbit sqlserver diff AppDB --analyze`。
 
-Orbit 不會自動移除該儲存空間。刪除 volume 或 bind mount 內的資料會永久
-刪除所有本機資料庫；只有一顆 database 需要乾淨資料時，請使用
-`orbit sqlserver reset <dbname>`。
+完整比對會準備或重用 DACPAC，再用 SqlPackage `/Action:DeployReport` 列出
+publish 預計建立、修改或刪除的物件。紀錄不足以判定時，Orbit 也會走這條路。
+這兩個指令都不會修改資料庫。
 
-全新的 volume 一開始是空的；`orbit sqlserver publish --all` 會建立並 publish
-所有設定好的資料庫。
+## Publish
 
-## 什麼情境用什麼指令
+![在主機上把 SQL Project 建置成 DACPAC，再用 SqlPackage 更新本機 SQL Server。](./assets/sql-publish.svg)
 
-| 情境 | 指令 | 成本 |
-|---|---|---|
-| 想知道 SQL source 有沒有變更 | `orbit sqlserver diff <dbname>` | 通常不到一秒 |
-| 你剛改了一支 stored proc / 一張 table | `orbit sqlserver publish <dbname>` | 約 15 秒，冪等，沒有 downtime |
-| 你從 `main` merge 了 schema，想在本地套用 | `orbit sqlserver publish <dbname>`（或 `--all`） | 每個 DB 約 15 秒，資料保留 |
-| DB 塞滿不要的測試資料 | `orbit sqlserver reset <dbname>` | 幾秒，丟棄本機資料 |
-| 初始化全新的 SQL Server | `orbit sqlserver publish --all` | 建立並 publish 所有 DB |
+```sh
+orbit sqlserver publish AccountsDev
+```
 
-## `orbit sqlserver publish`：日常快速路徑
+Orbit 預設擋下可能造成資料遺失的變更。先用 `diff` 檢查影響，再決定是否套用。
 
-預設情況下，`orbit sqlserver publish <db>` 在 **host 上**建置 SQL project
-(`dotnet build`)，
-再用 host 的 `sqlpackage` 把 dacpac 直接發佈到設定 target 的 published
-port——不重建 image、不用 container 內工具,Apple Silicon 上是原生 arm64。
-冪等:project 沒變時幾秒內收斂為 no-op,資料一律保留(破壞性變更預設擋下,
-`--allow-data-loss` 才放行)。
+::: details 設定與前置需求
 
-Agent 與 script 可用 `orbit sqlserver publish <db> --json` 執行這條一般路徑。
-成功時，`orbit.cli.v1` envelope 會列出所有已 publish 的 database。Force
-publish 不會在 JSON mode 執行：error envelope 會保留原本 scope 與
-`--allow-data-loss`，回傳一個 `destructive: true`、不含 `--yes` 的人工操作，確保執行
-的人仍會看到確認提示。
-
-DB schema 會收斂到 project：新增、修改或刪除 stored procedure、table
-或其他 project object，都會產生對應的 create、alter 或 drop。可能造成
-資料遺失的 drop 會顯示在 `orbit sqlserver diff`，publish 預設擋下，直到使用者明確
-加上 `--allow-data-loss`。Force publish 會列出所有受影響的 database 並再次要求確認；
-非互動執行時，只有在檢視影響後才使用 `--allow-data-loss --yes`。
-
-前置需求（`orbit doctor` 會檢查）：host 上的 sqlpackage——
-`dotnet tool install -g microsoft.sqlpackage`；Orbit 從 source 建置時還需要
-.NET SDK。
-
-一個明確的 section 同時決定「發佈到哪」與「發佈哪些專案」：
+在 `orbit.yaml` 指定 SQL Server 容器和要部署的專案。主機需要 SqlPackage，從原始碼建置時也需要 .NET SDK。用 `orbit doctor` 檢查。
 
 ```yaml
 sqlserver:
@@ -81,18 +44,22 @@ sqlserver:
     - path: database/Orders/Orders.sqlproj
 ```
 
-`target` 指向接收 publish 的 container；project 是 workspace-relative
-的 `.sqlproj` 檔案。預設 database name 來自檔名；`databases` 可明確把同一
-project 部署到多個名稱；指定時至少要有一個名稱。每個 database name 只能對應一個 project，因此
-basename 相同的不同 project files 會被拒絕。沒有 image sniffing、慣例
-container 名稱、目錄掃描，
-也沒有另一份 per-machine allowlist。
+`target` 是 SQL Server 容器名稱。`path` 相對於工作區。未設定 `databases`
+時，Orbit 用專案檔名作為資料庫名稱。明確指定時至少要有一個名稱，每個名稱只能對應一個專案。
+DACPAC 必須沿用 `.sqlproj` 檔名，包含設定了 `SqlTargetName` 的專案。
 
-Orbit publish 的是 build 依 `.sqlproj` 檔名產出的那個 dacpac，與目標資料庫叫
-什麼無關。若 project 自行改名輸出(`<SqlTargetName>`)，orbit 會直接失敗，而
-不是 publish 另一個 artifact。
+:::
 
-### 一次整個環境：`--all`
+::: details JSON 與可能遺失資料的變更
+
+一般部署可加 `--json`，成功時會列出已部署的資料庫。
+可能遺失資料的變更需用 `--allow-data-loss` 確認。JSON 模式會回報需人工執行的
+指令，保留原本的部署範圍與 `--allow-data-loss`，不會替你加 `--yes`。
+自動化若需要 `--yes`，請先確認變更與目標。
+
+:::
+
+### 批次 Publish
 
 `orbit sqlserver publish --all` 依 project merge 順序逐顆 publish 所有資料庫,
 遇到第一個失敗即停止。加上 `--parallel[=N]` 可同時 publish 最多 N 顆。
@@ -106,13 +73,7 @@ shared objects——各 project 共用的 login 與 role——而並行的 publi
 `Msg 15025: The server principal '<name>' already exists`。第一次用序列 publish、
 之後沿用同一台 server 就不會遇到；每次都開全新容器的流程請維持序列。
 
-在已建置的 server 上它確實值得：一次實測中，五顆預建 dacpac 的資料庫序列需
-28 秒，`--parallel=4` 只需 11–12 秒。自行量測時有兩個注意事項——建置後的
-第一次 publish 不具代表性（同一次量測中並行需 30 秒，跟序列一樣慢，要從第二次
-之後才穩定），另外從原始碼 build 而非用預建產物時比例會不同，因為成本會落在
-build 而不是 apply。
-
-### 發佈預先建置的 dacpac
+### 預建 DACPAC
 
 runner 已取得 build artifacts 時，可在 `publish`、`diff` 或 `reset` 加上
 `--dacpac-dir <root>`：
@@ -147,7 +108,7 @@ Doctor 會把缺少 project source 與 SDK 視為 warning，因為預建 artifac
 `password_env` 指定 target container 裡存放密碼的 key。Orbit 只在 DB
 操作執行時讀取解析後的值，不會在 status、logs 或 JSON output 暴露密碼。
 
-### 乾淨重置：`orbit sqlserver reset`
+### Reset
 
 `orbit sqlserver reset <db>` 會中斷現有連線、丟棄本機資料並套用最新 schema。
 不需要先執行任何設定指令。Orbit 有可用的快速還原狀態時會直接使用，否則
@@ -157,12 +118,40 @@ Doctor 會把缺少 project source 與 SDK 視為 warning，因為預建 artifac
 `orbit sqlserver query` 刻意只提供 CLI 操作。Dashboard 專注於 project drift、
 publish 與 reset，而不內嵌通用 SQL console。
 
-## Dashboard visibility
+## 持久化
+
+環境設定應把持久化儲存空間掛在 `/var/opt/mssql`；SQL Server 會在那裡寫入
+`.mdf` / `.ldf` 檔案。有這個 mount 時，你累積的 schema 與資料會在以下
+情境之間保留：
+
+- `orbit restart <sqlserver.target>`
+- Docker daemon 重啟
+- 主機重新開機
+- `orbit down` 之後再 `orbit up`
+
+Orbit 不會自動移除該儲存空間。刪除 volume 或 bind mount 內的資料會永久
+刪除所有本機資料庫；只有一顆 database 需要乾淨資料時，請使用
+`orbit sqlserver reset <dbname>`。
+
+全新的 volume 一開始是空的；`orbit sqlserver publish --all` 會建立並 publish
+所有設定好的資料庫。
+
+## 指令
+
+| 情境 | 指令 | 成本 |
+|---|---|---|
+| 想知道 SQL source 有沒有變更 | `orbit sqlserver diff <dbname>` | 通常不到一秒 |
+| 你剛改了一支 stored proc / 一張 table | `orbit sqlserver publish <dbname>` | 約 15 秒，冪等，沒有 downtime |
+| 你從 `main` merge 了 schema，想在本地套用 | `orbit sqlserver publish <dbname>`（或 `--all`） | 每個 DB 約 15 秒，資料保留 |
+| DB 塞滿不要的測試資料 | `orbit sqlserver reset <dbname>` | 幾秒，丟棄本機資料 |
+| 初始化全新的 SQL Server | `orbit sqlserver publish --all` | 建立並 publish 所有 DB |
+
+## Dashboard
 
 SQL Server 頁面會在進入或回到視窗時檢查 source 變更。每顆資料庫都會顯示
 是否同步，並提供 Check、Publish 與 Reset。
 
-### 從 dashboard 執行 publish
+### Dashboard Publish
 
 SQL Server 頁面為每個 db 提供 Publish 與 Reset，並提供 Publish all。
 Publish 的串流輸出顯示在 log panel；Reset 丟棄資料前一定會要求確認。尚未有
