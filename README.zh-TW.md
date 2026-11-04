@@ -75,6 +75,7 @@ playback。Dashboard 只綁定 loopback。
 - [Environment sources](docs/environment-sources.zh-TW.md)
 - [隔離的 runtime instances](docs/instances.zh-TW.md)
 - [在 E2E 測試底下使用 Orbit](docs/e2e-testing.zh-TW.md)
+- [整合](docs/integrations.zh-TW.md) —— 建立在 Orbit 上的第三方工具
 - [Tracing](docs/tracing.zh-TW.md)
 - [疑難排解](docs/troubleshooting.zh-TW.md)
 - [版本與相容性](docs/versioning.zh-TW.md)

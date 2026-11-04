@@ -78,6 +78,7 @@ Core user documentation:
 - [Environment sources](docs/environment-sources.md)
 - [Isolated runtime instances](docs/instances.md)
 - [Using Orbit under an E2E test suite](docs/e2e-testing.md)
+- [Integrations](docs/integrations.md) — third-party tools built on Orbit
 - [Tracing](docs/tracing.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Versioning and compatibility](docs/versioning.md)

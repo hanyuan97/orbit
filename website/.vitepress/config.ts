@@ -31,6 +31,7 @@ const englishSidebar = [
       { text: 'Instances', link: '/docs/instances' },
       { text: 'SQL Projects', link: '/docs/sql-workflow' },
       { text: 'E2E testing', link: '/docs/e2e-testing' },
+      { text: 'Integrations', link: '/docs/integrations' },
       { text: 'Troubleshooting', link: '/docs/troubleshooting' },
     ],
   },
@@ -71,6 +72,7 @@ const traditionalChineseSidebar = [
       { text: 'Instances', link: '/zh-TW/docs/instances' },
       { text: 'SQL Projects', link: '/zh-TW/docs/sql-workflow' },
       { text: 'E2E 測試', link: '/zh-TW/docs/e2e-testing' },
+      { text: '整合', link: '/zh-TW/docs/integrations' },
       { text: '疑難排解', link: '/zh-TW/docs/troubleshooting' },
     ],
   },
@@ -258,6 +260,7 @@ export default defineConfig({
             items: [
               { text: '設定參考', link: '/zh-TW/docs/configuration' },
               { text: '疑難排解', link: '/zh-TW/docs/troubleshooting' },
+              { text: '整合', link: '/zh-TW/docs/integrations' },
               { text: '為什麼選擇 Orbit', link: '/zh-TW/docs/why-orbit' },
             ],
           },
@@ -388,6 +391,7 @@ export default defineConfig({
         items: [
           { text: 'Configuration', link: '/docs/configuration' },
           { text: 'Troubleshooting', link: '/docs/troubleshooting' },
+          { text: 'Integrations', link: '/docs/integrations' },
           { text: 'Why Orbit', link: '/docs/why-orbit' },
         ],
       },
