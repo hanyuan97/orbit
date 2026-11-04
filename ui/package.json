@@ -21,7 +21,7 @@
     "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/node": "^25.8.0",
-    "@vitest/ui": "^4.1.6",
+    "@vitest/ui": "^4.1.11",
     "eslint": "^10.4.0",
     "eslint-plugin-check-file": "^3.3.1",
     "eslint-plugin-svelte": "^3.17.1",
@@ -33,7 +33,7 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.59.3",
     "vite": "^8.1.6",
-    "vitest": "^4.1.6",
+    "vitest": "^4.1.11",
     "zod": "^4.6.7"
   },
   "dependencies": {

@@ -398,11 +398,12 @@ func (a *App) newPoller(cfg *config.Config, orch *Orchestrator) *container.Polle
 	poller.OnUnavailable = func(_ error) {
 		orch.OnContainerObservationUnavailable()
 	}
-	poller.OnStateUpdate = func(states map[string]container.ContainerState) {
+	poller.OnStateUpdate = func(listedAt time.Time, states map[string]container.ContainerState) {
 		for name, state := range states {
 			restart := orch.OnContainerObserved(name, ContainerObservation{
 				ID:        state.ID,
 				Running:   state.Running,
+				ListedAt:  listedAt,
 				StartedAt: state.StartedAt,
 				Exit:      ContainerExit{Code: state.ExitCode, OOMKilled: state.OOMKilled},
 			})
@@ -418,7 +419,7 @@ func (a *App) newPoller(cfg *config.Config, orch *Orchestrator) *container.Polle
 				continue
 			}
 			if _, seen := states[svc.Name]; !seen {
-				orch.OnContainerMissing(svc.Name)
+				orch.OnContainerMissing(svc.Name, listedAt)
 			}
 		}
 	}

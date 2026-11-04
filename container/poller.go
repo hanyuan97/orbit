@@ -32,8 +32,10 @@ type Poller struct {
 
 	// OnDrift is called when a container's state changes unexpectedly.
 	OnDrift func(name string, state ContainerState)
-	// OnStateUpdate is called on every poll with current states.
-	OnStateUpdate func(states map[string]ContainerState)
+	// OnStateUpdate is called on every poll with the states Docker listed at
+	// listedAt. The list is taken before the per-container inspects, so the
+	// states can be older than lifecycle changes made while the poll ran.
+	OnStateUpdate func(listedAt time.Time, states map[string]ContainerState)
 	// OnUnavailable is called once after Docker cannot be observed for two
 	// consecutive polls. One missed poll is treated as transient transport
 	// noise; a successful poll arms the callback for a future outage.
@@ -82,6 +84,7 @@ func (p *Poller) poll(ctx context.Context) {
 		p.recordFailure(errors.New("Docker client is unavailable"))
 		return
 	}
+	listedAt := time.Now()
 	containers, err := p.cli.ContainerList(ctx, client.ContainerListOptions{
 		All:     true,
 		Filters: make(client.Filters).Add("label", labelManaged+"=true"),
@@ -144,7 +147,7 @@ func (p *Poller) poll(ctx context.Context) {
 	}
 
 	if p.OnStateUpdate != nil {
-		p.OnStateUpdate(current)
+		p.OnStateUpdate(listedAt, current)
 	}
 
 	p.lastStates = current
