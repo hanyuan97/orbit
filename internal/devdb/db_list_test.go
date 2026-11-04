@@ -120,8 +120,8 @@ func captureStdout(t *testing.T, fn func() error) ([]byte, error) {
 	}
 	orig := os.Stdout
 	os.Stdout = w
+	defer func() { os.Stdout = orig }()
 	runErr := fn()
-	os.Stdout = orig
 	_ = w.Close()
 	out, _ := io.ReadAll(r)
 	return out, runErr

@@ -148,7 +148,8 @@ type dbRecordedEvent struct {
 
 // dbListJSON lists one record per configured database, in project order;
 // a database declared by two projects belongs to the first — the same
-// rule publishTargetsFrom gives `publish --all`. Records for databases no longer configured are left out.
+// rule publishTargetsFrom gives `publish --all`. Records for databases no
+// longer configured are left out.
 func dbListJSON(projects []DevDBProject, snap dbstate.Snapshot) dbListJSONResult {
 	records := []dbPublishRecord{}
 	seen := map[string]bool{}
