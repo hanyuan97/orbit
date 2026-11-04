@@ -1,8 +1,10 @@
 # Orbit
 
-A control panel for the Orbit local dev environment in the Herdr app (`herdr-app`, the desktop app, not the Herdr terminal TUI) that you open over your work with `cmd-o`. It floats as a window covering 75% of the width and 80% of the height. Across the top you see every Orbit runtime on the machine (the default one and each `orbit --instance <name>`) as pills, with health chips next to them. Below are four tabs: the resource table, live logs, recent traces with a span waterfall, and SQL Server sync status. You can restart or stop a resource, stop a whole runtime, or send logs or a trace to a Claude session for diagnosis. The window can dock beside your terminal, become a tab, float again, or close.
+Control your local Orbit environments from Herdr: services, logs, traces and SQL.
 
 ![Orbit](preview.png)
+
+A control panel for the Orbit local dev environment in the Herdr app (`herdr-app`, the desktop app, not the Herdr terminal TUI) that you open over your work with `cmd-o`. It floats as a window covering 75% of the width and 80% of the height. Across the top you see every Orbit runtime on the machine (the default one and each `orbit --instance <name>`) as pills, with health chips next to them. Below are four tabs: the resource table, live logs, recent traces with a span waterfall, and SQL Server sync status. You can restart or stop a resource, stop a whole runtime, or send logs or a trace to a Claude session for diagnosis. The window can dock beside your terminal, become a tab, float again, or close.
 
 ## What you see
 

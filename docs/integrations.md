@@ -17,11 +17,8 @@ Install: in Orca, open Settings → Plugins → Add → "From a Git URL…" and 
 
 ## Orbit for Herdr app
 
-An Orbit window for the [Herdr app](https://herdr.dev) (`herdr-app`, the desktop
-app; not the Herdr terminal TUI): every instance as a pill, its containers and
-services with restart and stop, logs, traces with their span waterfall, SQL sync
-status, and a button that stops the daemon. Logs and traces can be handed to a
-coding agent in a Herdr app terminal.
+Control your local Orbit environments from the [Herdr app](https://herdr.dev):
+services, logs, traces and SQL.
 
 ![The Orbit window in the Herdr app](./assets/integrations/herdr-app-orbit-panel.png)
 

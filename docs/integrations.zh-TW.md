@@ -17,10 +17,8 @@ containers 與 services、SQL 同步狀態，並可在 terminal 分頁開啟 log
 
 ## Orbit for Herdr app
 
-[Herdr app](https://herdr.dev)（`herdr-app` 桌面 app，不是 Herdr terminal TUI）的
-Orbit 視窗：每個 instance 一顆 pill、其 containers 與 services（可 restart、
-stop）、logs、traces 與 span waterfall、SQL 同步狀態，以及停止 daemon 的按鈕。
-logs 與 traces 可以交給 Herdr app terminal 裡的 coding agent。
+在 [Herdr app](https://herdr.dev) 裡管理本機的 Orbit 環境：services、logs、
+traces 與 SQL。
 
 ![Herdr app 中的 Orbit 視窗](./assets/integrations/herdr-app-orbit-panel.png)
 
