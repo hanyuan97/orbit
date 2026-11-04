@@ -131,6 +131,9 @@ type ExternalContainerRestart struct {
 type ContainerObservation struct {
 	ID      string
 	Running bool
+	// ListedAt is when Docker was asked for the poll's container list; zero
+	// means the observation is current.
+	ListedAt time.Time
 	// StartedAt is zero when the container never started or Docker could not
 	// inspect it; Exit is only Docker's account when StartedAt is set.
 	StartedAt time.Time
@@ -224,9 +227,13 @@ type ServiceInfo struct {
 	// so a Starting service is waiting on readiness rather than still
 	// launching. Reset on every start. Mutation requires the owning
 	// Orchestrator's mu.
-	launched  bool
-	StartedAt time.Time // when the service entered Starting state
-	HealthyAt time.Time // when the service first became Healthy
+	launched bool
+	// stateChangedAt is when State last took a different value. Same-state
+	// transitions leave it alone, so a steady stream of passing probes
+	// cannot hide drift. Mutation requires the owning Orchestrator's mu.
+	stateChangedAt time.Time
+	StartedAt      time.Time // when the service entered Starting state
+	HealthyAt      time.Time // when the service first became Healthy
 
 	// ctx is the per-service lifecycle context. It is created when the
 	// service transitions into Starting and cancelled by StopService/
@@ -307,6 +314,13 @@ func (i *ServiceInfo) settleEndedRuntime(obs ContainerObservation) {
 	}
 }
 
+// predates reports whether a poll listed Docker's containers before the
+// service last changed state. Applying that snapshot would undo an Orbit
+// lifecycle step that finished while the poll was in flight.
+func (i *ServiceInfo) predates(listedAt time.Time) bool {
+	return !listedAt.IsZero() && listedAt.Before(i.stateChangedAt)
+}
+
 // MarkRestart bumps the restart counter. Called by RestartService;
 // kept separate from Transition because restarting is a property of
 // the action, not the state being entered. Caller must hold the
@@ -339,6 +353,9 @@ func (i *ServiceInfo) MarkDependencyReady(dep string) (becameReady bool) {
 // any state change. Validation belongs in the orchestrator's higher
 // level decisions, not in the data type.
 func (i *ServiceInfo) Transition(to ServiceState) {
+	if i.State != to {
+		i.stateChangedAt = time.Now()
+	}
 	i.State = to
 	if to != StateDegraded {
 		// Reasons describe a degradation; entering any other state
