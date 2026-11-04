@@ -141,3 +141,42 @@ exit 128
 		}
 	}
 }
+
+// Later syncs clone from the stored URL, so it must keep the SSH login.
+func TestRefreshStoresTheSSHUsername(t *testing.T) {
+	bin := t.TempDir()
+	script := `#!/bin/sh
+case "$1" in
+  clone)
+    for arg do destination="$arg"; done
+    mkdir -p "$destination/envs"
+    printf 'version: "3"\n' > "$destination/envs/dev.yaml"
+    ;;
+  rev-parse) printf '0123456789abcdef\n' ;;
+  symbolic-ref) printf 'main\n' ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	orbitHome := t.TempDir()
+	registry, err := Load(RegistryPath(orbitHome))
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := Source{Name: "team", Type: TypeGit, URL: "ssh://git:secret@example.com/srv/envs.git"}
+	if err := registry.Add(source); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Refresh(registry, source, orbitHome, false, true); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := registry.Get("team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ssh://git@example.com/srv/envs.git"; stored.URL != want {
+		t.Fatalf("stored URL = %q, want %q", stored.URL, want)
+	}
+}

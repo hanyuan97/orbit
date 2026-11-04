@@ -44,7 +44,7 @@ Fields:
 |---|---|
 | `schema_version` | Contract version. Current value is `orbit.cli.v1`. |
 | `ok` | `true` on success, `false` on failure. |
-| `command` | The Orbit command that produced the response. URL credentials (userinfo and the query string) in a URL argument are removed, as in messages and recommended actions. |
+| `command` | The Orbit command that produced the response. URL credentials (userinfo and the query string) in a URL argument are removed, as in messages and recommended actions. An SSH URL (`ssh://`, `git+ssh://`, `ssh+git://`) keeps its username, which names the login rather than a secret; its password is still removed. |
 | `instance` | Named runtime targeted by `--instance`, omitted for the default runtime. |
 | `data` | Command-specific payload on success. |
 | `error` | Structured error payload on failure, otherwise `null`. |
