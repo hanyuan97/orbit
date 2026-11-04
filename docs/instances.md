@@ -22,12 +22,23 @@ the `instance` field, and their recommended actions retain that target.
 Named dashboards show the instance in the header and browser tab. The default
 runtime keeps the standard dashboard header without an instance badge.
 
-List named instances to discover their environment, state, dashboard, and
-resolved resource endpoints:
+List named instances to discover their environment, daemon state, dashboard,
+and resolved resource endpoints:
 
 ```bash
 orbit instance list --json
 ```
+
+`state` is the instance daemon's state (`running` or `stopped`), not its
+resources'. Each entry also reports:
+
+- `resource_states`: how many resources are in each state, keyed by the
+  resource `state` that `orbit status` reports, such as
+  `{"healthy": 2, "stopped": 10}`. It is omitted when the daemon is stopped or
+  does not answer, so a missing field means unknown, not zero.
+- `last_active_at`: the time of the instance's newest history record: a
+  command, a dashboard action, or a daemon event such as a container restarted
+  outside Orbit. It is omitted when the instance has no history yet.
 
 ## Isolation and ports
 

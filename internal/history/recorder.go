@@ -9,6 +9,7 @@ import (
 )
 
 const ringLimit = 500
+const fileName = "history.jsonl"
 const rotateAtBytes = 5 * 1024 * 1024
 
 type Recorder struct {
@@ -23,7 +24,7 @@ func New(dir string) (*Recorder, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
-	r := &Recorder{path: filepath.Join(dir, "history.jsonl"), subs: map[chan Record]struct{}{}}
+	r := &Recorder{path: filepath.Join(dir, fileName), subs: map[chan Record]struct{}{}}
 	r.load()
 	if err := r.open(); err != nil {
 		return nil, err

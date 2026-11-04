@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/iml885203/orbit/atomicio"
+	"github.com/iml885203/orbit/internal/history"
 	"github.com/iml885203/orbit/platform"
 )
 
@@ -23,15 +24,20 @@ type Manifest struct {
 }
 
 type Summary struct {
-	Name        string            `json:"name"`
-	Environment string            `json:"environment,omitempty"`
-	State       string            `json:"state"`
-	PID         int               `json:"pid,omitempty"`
-	Dashboard   string            `json:"dashboard,omitempty"`
-	SocketPath  string            `json:"socket_path"`
-	ConfigPath  string            `json:"config_path,omitempty"`
-	Namespace   string            `json:"namespace"`
-	Endpoints   map[string]string `json:"endpoints,omitempty"`
+	Name        string `json:"name"`
+	Environment string `json:"environment,omitempty"`
+	// State is the daemon's state, not its resources'.
+	State      string            `json:"state"`
+	PID        int               `json:"pid,omitempty"`
+	Dashboard  string            `json:"dashboard,omitempty"`
+	SocketPath string            `json:"socket_path"`
+	ConfigPath string            `json:"config_path,omitempty"`
+	Namespace  string            `json:"namespace"`
+	Endpoints  map[string]string `json:"endpoints,omitempty"`
+	// ResourceStates is absent when the daemon could not be asked, so a
+	// missing map means unknown rather than nothing running.
+	ResourceStates map[string]int `json:"resource_states,omitzero"`
+	LastActiveAt   time.Time      `json:"last_active_at,omitzero"`
 }
 
 func WriteManifest(configPath string) error {
@@ -103,11 +109,13 @@ func List(baseHome string) ([]Summary, error) {
 		if dashboardPort > 0 && state == "running" {
 			dashboard = fmt.Sprintf("http://localhost:%d", dashboardPort)
 		}
-		instances = append(instances, Summary{
+		summary := Summary{
 			Name: entry.Name(), Environment: environmentName(manifest.ConfigPath), State: state,
 			PID: pid, Dashboard: dashboard, SocketPath: filepath.Join(runtime.Home, "orbit.sock"),
 			ConfigPath: manifest.ConfigPath, Namespace: runtime.Namespace,
-		})
+		}
+		summary.LastActiveAt = history.LastRecordTime(runtime.Home)
+		instances = append(instances, summary)
 	}
 	sort.Slice(instances, func(i, j int) bool { return instances[i].Name < instances[j].Name })
 	return instances, nil

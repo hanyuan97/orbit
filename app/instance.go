@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/iml885203/orbit/cli"
@@ -43,7 +44,7 @@ func runInstanceList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	for i := range instances {
-		instances[i].Endpoints = instanceEndpoints(instances[i])
+		describeInstanceResources(&instances[i])
 	}
 	if cli.JSONOutput {
 		return cli.WriteJSONSuccess(os.Stdout, commandString(), struct {
@@ -54,26 +55,34 @@ func runInstanceList(_ *cobra.Command, _ []string) error {
 		fmt.Println("No named instances.")
 		return nil
 	}
-	fmt.Printf("%-20s %-18s %-10s %s\n", "NAME", "ENVIRONMENT", "STATE", "ENDPOINTS")
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "NAME\tENVIRONMENT\tSTATE\tRESOURCES\tLAST ACTIVE\tENDPOINTS")
 	for _, item := range instances {
-		fmt.Printf("%-20s %-18s %-10s %s\n", item.Name, item.Environment, item.State, formatInstanceEndpoints(item.Endpoints))
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", item.Name, item.Environment, item.State,
+			formatResourceStates(item.ResourceStates), formatLastActive(item.LastActiveAt), formatInstanceEndpoints(item.Endpoints))
 	}
-	return nil
+	return w.Flush()
 }
 
-func instanceEndpoints(item instance.Summary) map[string]string {
+// describeInstanceResources fills endpoints and per-state resource counts
+// from one Status call to the instance's daemon. Counts stay nil unless that
+// call succeeds, so a stopped or unreachable daemon reads as unknown.
+func describeInstanceResources(item *instance.Summary) {
 	endpoints := make(map[string]string)
 	if item.Dashboard != "" {
 		endpoints["dashboard"] = item.Dashboard
 	}
+	item.Endpoints = endpoints
 	if item.State != "running" {
-		return endpoints
+		return
 	}
 	status, err := daemon.NewClient(item.SocketPath).Status()
 	if err != nil {
-		return endpoints
+		return
 	}
+	states := make(map[string]int)
 	for _, resource := range status.Resources {
+		states[resource.State]++
 		if resource.URL != "" {
 			endpoints[resource.Name] = resource.URL
 			continue
@@ -91,7 +100,33 @@ func instanceEndpoints(item instance.Summary) map[string]string {
 			endpoints[key] = fmt.Sprintf("localhost:%d", resource.Ports[label])
 		}
 	}
-	return endpoints
+	item.ResourceStates = states
+}
+
+func formatResourceStates(states map[string]int) string {
+	if states == nil {
+		return "-"
+	}
+	if len(states) == 0 {
+		return "none"
+	}
+	names := make([]string, 0, len(states))
+	for name := range states {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, fmt.Sprintf("%d %s", states[name], name))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func formatLastActive(at time.Time) string {
+	if at.IsZero() {
+		return "-"
+	}
+	return at.Local().Format("2006-01-02 15:04")
 }
 
 func formatInstanceEndpoints(endpoints map[string]string) string {

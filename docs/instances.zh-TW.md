@@ -22,12 +22,22 @@ field，recommended actions 也會保留該 target。
 Named dashboard 會在 header 與 browser tab 顯示 instance；default runtime 則維持
 標準 dashboard header，不顯示 instance badge。
 
-列出 named instances，即可取得 environment、state、dashboard 與解析後的 resource
-endpoints：
+列出 named instances，即可取得 environment、daemon state、dashboard 與解析後的
+resource endpoints：
 
 ```bash
 orbit instance list --json
 ```
+
+`state` 是該 instance daemon 的狀態（`running` 或 `stopped`），不是 resources
+的狀態。每個 entry 另外回報：
+
+- `resource_states`：各 state 的 resource 數量，key 為 `orbit status` 回報的
+  resource `state`，例如 `{"healthy": 2, "stopped": 10}`。Daemon 停止或沒有
+  回應時會省略，因此欄位不存在代表未知，而非零。
+- `last_active_at`：該 instance 最新一筆 history record 的時間，包含 command、
+  dashboard 操作，以及在 Orbit 之外重啟 container 這類 daemon event。Instance 尚無
+  history 時會省略。
 
 ## 隔離與 ports
 

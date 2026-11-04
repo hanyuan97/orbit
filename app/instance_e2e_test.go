@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -78,6 +79,7 @@ func TestE2E_NamedInstancesRunAndCleanIndependently(t *testing.T) {
 	first := "a"
 	peerName := "a-ca978112-x"
 	peer := assertInstancesUseIndependentEndpoints(t, env, first, peerName)
+	assertListReportsResourceStatesAndActivity(t, env, first, peerName)
 	assertOrdinaryDownCleansAnonymousAndPreservesNamedVolume(t, env, first)
 	assertStaleReplacementCleansAnonymousAndPreservesConfiguredStorage(t, env, first)
 	assertCleaningInstancePreservesPeer(t, env, first, peer)
@@ -186,11 +188,58 @@ func cleanupNamedInstances(t *testing.T, env *e2eEnv) {
 }
 
 type namedInstanceSummary struct {
-	Name      string            `json:"name"`
-	State     string            `json:"state"`
-	Dashboard string            `json:"dashboard"`
-	Namespace string            `json:"namespace"`
-	Endpoints map[string]string `json:"endpoints"`
+	Name           string            `json:"name"`
+	State          string            `json:"state"`
+	Dashboard      string            `json:"dashboard"`
+	Namespace      string            `json:"namespace"`
+	Endpoints      map[string]string `json:"endpoints"`
+	ResourceStates map[string]int    `json:"resource_states"`
+	LastActiveAt   *time.Time        `json:"last_active_at"`
+}
+
+func listNamedInstances(t *testing.T, env *e2eEnv) (map[string]namedInstanceSummary, string) {
+	t.Helper()
+	output := runNamedInstance(t, env, "instance", "list", "--json")
+	envelope := parseE2EEnvelope(t, output)
+	var data struct {
+		Instances []namedInstanceSummary `json:"instances"`
+	}
+	if err := json.Unmarshal(envelope.Data, &data); err != nil {
+		t.Fatal(err)
+	}
+	byName := make(map[string]namedInstanceSummary, len(data.Instances))
+	for _, item := range data.Instances {
+		byName[item.Name] = item
+	}
+	return byName, output
+}
+
+// One instance runs with a resource stopped, the other has no daemon: list
+// must count the first by resource state and leave the second's counts
+// absent (unknown), while both report when they were last used.
+func assertListReportsResourceStatesAndActivity(t *testing.T, env *e2eEnv, running, stopped string) {
+	t.Helper()
+	runNamedInstance(t, env, "down", "cache", "--instance", running, "--json")
+	runNamedInstance(t, env, "daemon", "stop", "--instance", stopped, "--json")
+
+	instances, output := listNamedInstances(t, env)
+	got := instances[running]
+	want := map[string]int{"healthy": 2, "stopped": 1}
+	if got.State != "running" || !reflect.DeepEqual(got.ResourceStates, want) {
+		t.Fatalf("running instance resource_states = %v (state %q), want %v\n%s", got.ResourceStates, got.State, want, output)
+	}
+	idle := instances[stopped]
+	if idle.State != "stopped" || idle.ResourceStates != nil {
+		t.Fatalf("stopped instance = %+v, want state stopped without resource_states\n%s", idle, output)
+	}
+	for _, item := range []namedInstanceSummary{got, idle} {
+		if item.LastActiveAt == nil || time.Since(*item.LastActiveAt) > time.Hour {
+			t.Fatalf("instance %s last_active_at = %v, want a recent timestamp\n%s", item.Name, item.LastActiveAt, output)
+		}
+	}
+
+	upInstancePorts(t, env, running)
+	upInstancePorts(t, env, stopped)
 }
 
 func assertInstancesUseIndependentEndpoints(t *testing.T, env *e2eEnv, first, second string) namedInstanceSummary {
@@ -319,21 +368,12 @@ func assertStaleReplacementCleansAnonymousAndPreservesConfiguredStorage(t *testi
 
 func instanceNamespaceFromList(t *testing.T, env *e2eEnv, name string) string {
 	t.Helper()
-	output := runNamedInstance(t, env, "instance", "list", "--json")
-	envelope := parseE2EEnvelope(t, output)
-	var data struct {
-		Instances []namedInstanceSummary `json:"instances"`
+	instances, output := listNamedInstances(t, env)
+	item, ok := instances[name]
+	if !ok {
+		t.Fatalf("instance %q missing from list: %s", name, output)
 	}
-	if err := json.Unmarshal(envelope.Data, &data); err != nil {
-		t.Fatal(err)
-	}
-	for _, item := range data.Instances {
-		if item.Name == name {
-			return item.Namespace
-		}
-	}
-	t.Fatalf("instance %q missing from list: %s", name, output)
-	return ""
+	return item.Namespace
 }
 
 func assertCleaningInstancePreservesPeer(t *testing.T, env *e2eEnv, cleaned string, peer namedInstanceSummary) {

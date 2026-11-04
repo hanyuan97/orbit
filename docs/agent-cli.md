@@ -52,7 +52,7 @@ Fields:
 | `recommended_actions` | Follow-up commands the agent should consider. |
 
 Every lifecycle command accepts `--instance <name>`. Use `orbit instance list
---json` to discover each instance's environment, state, dashboard, and
+--json` to discover each instance's environment, daemon state, dashboard, and
 resolved resource endpoints. `orbit instance clean <name> --json` stops the
 instance and removes only resources carrying that instance's ownership. Its
 `data` is `{instance, removed}`, plus `skipped_processes[]` (`service`, `pid`,
