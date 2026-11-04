@@ -27,6 +27,32 @@ func TestCommandStringQuotesSingleQuotes(t *testing.T) {
 	}
 }
 
+func TestCommandStringRedactsURLCredentials(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	os.Args = []string{"orbit", "source", "add", "x",
+		"--url", "https://user:secret@host/repo?access_token=secret",
+		"--url=https://secret@host/other",
+		"https://host/positional?token=secret",
+		"--json"}
+	got := commandString()
+	if want := "orbit source add x --url https://host/repo --url=https://host/other https://host/positional --json"; got != want {
+		t.Fatalf("commandString() = %q, want %q", got, want)
+	}
+}
+
+func TestCommandStringLeavesNonURLArgumentsAsTyped(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	query := "SELECT 'https://a@b/c?d' AS u"
+	os.Args = []string{"orbit", "sqlserver", "query", query, "--filter=a?b"}
+	if got, want := commandString(), "orbit sqlserver query 'SELECT '\"'\"'https://a@b/c?d'\"'\"' AS u' '--filter=a?b'"; got != want {
+		t.Fatalf("commandString() = %q, want %q", got, want)
+	}
+}
+
 func TestShouldRecordCLIDaemonLifecycleCommands(t *testing.T) {
 	root := &cobra.Command{Use: "orbit"}
 	daemonCmd := &cobra.Command{Use: "daemon"}

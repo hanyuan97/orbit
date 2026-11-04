@@ -111,7 +111,7 @@ func envRepoAccessError(err error, retry string, attach func(error, []cli.JSONAc
 		)
 	}
 	message := fmt.Sprintf("cannot access environment repo %s: %v", cloneErr.DisplayURL(), cloneErr.Err)
-	if detail := strings.TrimSpace(strings.ReplaceAll(cloneErr.Output, cloneErr.URL, cloneErr.DisplayURL())); detail != "" {
+	if detail := strings.TrimSpace(cloneErr.RedactedOutput()); detail != "" {
 		message += "\nGit: " + detail
 	}
 	if cloneErr.ReportsAmbiguousGitHubAvailability() {

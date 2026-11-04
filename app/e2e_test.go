@@ -2700,6 +2700,33 @@ func TestE2E_SourceAddClassifiesRepositoryAccessFailure(t *testing.T) {
 	}
 }
 
+func TestE2E_JSONNeverEchoesURLCredentials(t *testing.T) {
+	binary := findOrbitBinary(t)
+	credentialed := "https://user:secret-pw@127.0.0.1:1/repo.git?access_token=secret-token"
+	for name, args := range map[string][]string{
+		"source add": {"source", "add", "team", "--url", credentialed, "--json"},
+		"init":       {"init", "--yes", "--source", "team", "--url", credentialed, "--json"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			command := exec.Command(binary, args...)
+			command.Dir = t.TempDir()
+			command.Env = append(os.Environ(), "ORBIT_HOME="+t.TempDir(), "GIT_TERMINAL_PROMPT=0")
+			output, err := command.Output()
+			if err == nil {
+				t.Fatalf("env sync unexpectedly succeeded:\n%s", output)
+			}
+			if bytes.Contains(output, []byte("secret")) {
+				t.Fatalf("envelope leaks URL credentials:\n%s", output)
+			}
+			envelope := parseE2EEnvelope(t, string(output))
+			want := "orbit " + strings.Join(args[:len(args)-2], " ") + " https://127.0.0.1:1/repo.git --json"
+			if envelope.Command != want {
+				t.Fatalf("command = %q, want %q", envelope.Command, want)
+			}
+		})
+	}
+}
+
 func TestE2E_SourceAddExplainsMissingGitAtTheSyncBoundary(t *testing.T) {
 	binary := findOrbitBinary(t)
 	command := exec.Command(binary, "source", "add", "team", "--url", "https://example.invalid/environments.git", "--json")

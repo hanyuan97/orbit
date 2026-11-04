@@ -120,3 +120,16 @@ func TestEnvRepoSyncErrorDoesNotAssumeMissingGitHubRepoIsPrivate(t *testing.T) {
 		t.Fatalf("ambiguous failure recommends an assumptive action: %+v", envelope.RecommendedActions)
 	}
 }
+
+// The CLI history stores execErr.Error(), so the error text itself must not
+// carry a query token Git echoed back.
+func TestEnvRepoAccessErrorTextHasNoQueryToken(t *testing.T) {
+	err := envRepoSyncError(&envsync.CloneError{
+		URL:    "https://user:pw@example.com/env.git?access_token=secret",
+		Err:    errors.New("exit status 128"),
+		Output: "fatal: unable to access 'https://example.com/env.git?access_token=secret/': Couldn't connect to server",
+	})
+	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "pw@") {
+		t.Fatalf("error text leaks URL credentials: %v", err)
+	}
+}

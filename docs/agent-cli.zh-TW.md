@@ -46,7 +46,7 @@ orbit logs redis --json
 |---|---|
 | `schema_version` | Contract 版本，目前為 `orbit.cli.v1`。 |
 | `ok` | 成功為 `true`，失敗為 `false`。 |
-| `command` | 產生這個 response 的 Orbit 指令。 |
+| `command` | 產生這個 response 的 Orbit 指令。URL 參數中的 credentials（userinfo 與 query string）會被移除，與訊息和 recommended actions 相同。 |
 | `instance` | `--instance` 指定的 named runtime；default runtime 會省略。 |
 | `data` | 成功時的 command-specific payload。 |
 | `error` | 失敗時的結構化 error payload，否則為 `null`。 |

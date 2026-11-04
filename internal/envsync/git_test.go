@@ -151,10 +151,55 @@ func TestRedactURLHidesCredentialsEvenWhenTheURLDoesNotParse(t *testing.T) {
 		"https://user:bad%zz-token@github.com/example/env.git": "https://github.com/example/env.git",
 		"https://user:p@ss@exa mple.com":                       "https://exa mple.com",
 		"git@github.com:example/env.git":                       "git@github.com:example/env.git",
+		"https://user:bad%zz@host/env.git?access_token=secret": "https://host/env.git",
+		"https://user:pa?ss@host/repo":                         "https://host/repo",
+		"https://user:p%zz?q@host/r":                           "https://host/r",
 	}
 	for raw, want := range tests {
 		if got := RedactURL(raw); got != want {
 			t.Errorf("RedactURL(%q) = %q, want %q", raw, got, want)
 		}
+	}
+}
+
+func TestRedactURLDropsTheQueryOfARemoteURL(t *testing.T) {
+	tests := map[string]string{
+		"https://host/env.git?access_token=secret":         "https://host/env.git",
+		"https://user:pw@host/env.git?private_token=x#ref": "https://host/env.git#ref",
+		"https://host/env.git?":                            "https://host/env.git",
+		"https://host/env.git":                             "https://host/env.git",
+		"file:///tmp/env?x=1":                              "file:///tmp/env?x=1",
+	}
+	for raw, want := range tests {
+		if got := RedactURL(raw); got != want {
+			t.Errorf("RedactURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}
+
+// Git strips userinfo from the URL it echoes but keeps the query, so the
+// echoed form never equals the configured URL.
+func TestCloneErrorRedactsAQueryTokenGitEchoes(t *testing.T) {
+	err := &CloneError{
+		URL:    "https://user:pw@127.0.0.1:9/repo?access_token=secret",
+		Err:    errors.New("exit status 128"),
+		Output: "fatal: unable to access 'https://127.0.0.1:9/repo?access_token=secret/': Couldn't connect to server",
+	}
+	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "pw") {
+		t.Fatalf("error leaks URL credentials: %v", err)
+	}
+	if want := "fatal: unable to access 'https://127.0.0.1:9/repo/': Couldn't connect to server"; err.RedactedOutput() != want {
+		t.Fatalf("RedactedOutput() = %q, want %q", err.RedactedOutput(), want)
+	}
+}
+
+func TestCloneErrorRedactsAQueryTokenWhenTheURLDoesNotParse(t *testing.T) {
+	err := &CloneError{
+		URL:    "https://user:bad%zz@127.0.0.1:9/repo?access_token=secret",
+		Err:    errors.New("exit status 128"),
+		Output: "fatal: unable to access 'https://127.0.0.1:9/repo?access_token=secret/'",
+	}
+	if strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "bad%zz") {
+		t.Fatalf("error leaks URL credentials: %v", err)
 	}
 }
