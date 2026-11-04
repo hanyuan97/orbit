@@ -239,30 +239,17 @@ func EnsureDaemonWithContext(configPath string, features []string, contextKind s
 }
 
 func EnsureDaemonWithOperationContext(ctx context.Context, configPath string, features []string, contextKind string) (*Client, error) {
-	if pid, alive := IsDaemonRunning(); alive {
-		// Verify we can actually connect
-		client := NewClient(DefaultSocketPath()).WithContext(ctx)
-		if err := client.Health(); err == nil {
-			if status, statusErr := client.Status(); statusErr == nil {
-				if mismatch := CheckConfigMatch(configPath, status.ConfigPath); mismatch != nil {
-					return nil, mismatch
-				}
-			}
-			return client, nil
-		} else if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		// A stale PID can be reused after reboot. The dashboard listener is
-		// independent ownership evidence; without it, killing the recorded PID
-		// could terminate an unrelated user process.
-		record := readPIDRecord()
-		if record.PID == pid && daemonOwnsDashboardPort(pid, record.DashboardPort) {
-			if err := retireUnreachableDaemon(ctx, pid); err != nil {
-				return nil, fmt.Errorf("%w: %w", ErrDaemonNotReady, err)
+	client, err := ConnectRunningDaemon(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if client != nil {
+		if status, statusErr := client.Status(); statusErr == nil {
+			if mismatch := CheckConfigMatch(configPath, status.ConfigPath); mismatch != nil {
+				return nil, mismatch
 			}
 		}
-		RemovePID()
-		_ = os.Remove(DefaultSocketPath())
+		return client, nil
 	}
 
 	if err := ValidateSocketPath(DefaultSocketPath()); err != nil {
@@ -285,7 +272,7 @@ func EnsureDaemonWithOperationContext(ctx context.Context, configPath string, fe
 		return nil, fmt.Errorf("starting daemon: %w", err)
 	}
 
-	client := NewClient(DefaultSocketPath()).WithContext(ctx)
+	client = NewClient(DefaultSocketPath()).WithContext(ctx)
 	if err := waitForReadyOrDeath(ctx, client, pid, 30*time.Second); err != nil {
 		tail := tailDaemonLog(logOffset, 20)
 		switch {
@@ -297,6 +284,34 @@ func EnsureDaemonWithOperationContext(ctx context.Context, configPath string, fe
 	}
 
 	return client, nil
+}
+
+// ConnectRunningDaemon returns a client for a healthy daemon, or nil when
+// none is running. A live but unreachable daemon PID is retired first, so a
+// nil client means the runtime home has no daemon left to serve it.
+func ConnectRunningDaemon(ctx context.Context) (*Client, error) {
+	pid, alive := IsDaemonRunning()
+	if !alive {
+		return nil, nil
+	}
+	client := NewClient(DefaultSocketPath()).WithContext(ctx)
+	if err := client.Health(); err == nil {
+		return client, nil
+	} else if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	// A stale PID can be reused after reboot. The dashboard listener is
+	// independent ownership evidence; without it, killing the recorded PID
+	// could terminate an unrelated user process.
+	record := readPIDRecord()
+	if record.PID == pid && daemonOwnsDashboardPort(pid, record.DashboardPort) {
+		if err := retireUnreachableDaemon(ctx, pid); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrDaemonNotReady, err)
+		}
+	}
+	RemovePID()
+	_ = os.Remove(DefaultSocketPath())
+	return nil, nil
 }
 
 func daemonOwnsDashboardPort(pid, port int) bool {

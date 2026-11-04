@@ -56,7 +56,8 @@ orbit logs redis --json
 所有 lifecycle commands 都接受 `--instance <name>`。使用 `orbit instance
 list --json` 取得各 instance 的 environment、state、dashboard 與解析後的
 resource endpoints。`orbit instance clean <name> --json` 只會停止並移除帶有
-該 instance ownership 的 resources。Named runtime 產生的 recommended actions
+該 instance ownership 的 resources。其 `data` 為 `{instance, removed}`；若有
+保留執行中的已記錄 PIDs，另含 `skipped_processes[]`（`service`、`pid`、`reason`）。Named runtime 產生的 recommended actions
 會保留 instance target。完整 targeting 與 cleanup model 見
 [隔離的 runtime instances](instances.zh-TW.md)。
 

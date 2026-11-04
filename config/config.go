@@ -226,9 +226,13 @@ const DefaultHealthRetries = 12
 // into a red environment while still surfacing a real outage quickly.
 const DefaultHealthFailureThreshold = 3
 
+// DefaultShutdownTimeout is the grace period before a stopping process group
+// is killed. It is shared because instance cleanup may have no config at all.
+const DefaultShutdownTimeout = 30 * time.Second
+
 func applyDefaults(cfg *Config) {
 	if cfg.Settings.ShutdownTimeout == 0 {
-		cfg.Settings.ShutdownTimeout = 30 * time.Second
+		cfg.Settings.ShutdownTimeout = DefaultShutdownTimeout
 	}
 	if cfg.Settings.HealthCheckInterval == 0 {
 		cfg.Settings.HealthCheckInterval = 5 * time.Second
