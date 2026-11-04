@@ -46,19 +46,25 @@ func TestTraceSummaryWireContract(t *testing.T) {
 	sum := tracing.TraceSummary{
 		TraceID: "t", RootService: "api", RootName: "POST /x",
 		StartUnixNano: 1, DurationMs: 2, SpanCount: 3,
-		Services: []string{"api"}, Status: "ok",
+		Services: []string{"api"}, Status: "ok", Health: true,
 	}
 	assertExactKeys(t, jsonKeys(t, sum), []string{
 		"traceId", "rootService", "rootName", "startUnixNano",
-		"durationMs", "spanCount", "services", "status",
+		"durationMs", "spanCount", "services", "status", "health",
 	})
+	// health is omitted when false, so a non-probe summary keeps the
+	// original key set.
+	sum.Health = false
+	if jsonKeys(t, sum)["health"] {
+		t.Error("health should be omitted when false")
+	}
 }
 
 func TestTraceAndSpanWireContract(t *testing.T) {
 	tr := tracing.Trace{
 		TraceID: "t", RootService: "api", RootName: "POST /x",
 		StartUnixNano: 1, DurationMs: 2, SpanCount: 1,
-		Services: []string{"api"}, Status: "error",
+		Services: []string{"api"}, Status: "error", Health: true,
 		Spans: []tracing.Span{{
 			TraceID: "t", SpanID: "s", ParentID: "p", Service: "api", Name: "op",
 			Kind: "server", StartUnixNano: 1, EndUnixNano: 2, DurationMs: 1,
@@ -67,7 +73,7 @@ func TestTraceAndSpanWireContract(t *testing.T) {
 	}
 	assertExactKeys(t, jsonKeys(t, tr), []string{
 		"traceId", "rootService", "rootName", "startUnixNano",
-		"durationMs", "spanCount", "services", "status", "spans",
+		"durationMs", "spanCount", "services", "status", "health", "spans",
 	})
 	assertExactKeys(t, jsonKeys(t, tr.Spans[0]), []string{
 		"traceId", "spanId", "parentId", "service", "name", "kind",

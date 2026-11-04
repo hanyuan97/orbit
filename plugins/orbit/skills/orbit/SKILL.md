@@ -198,6 +198,11 @@ and destructive-operation rules. Deeper references live in the repository's
   use `-f --json` only when an NDJSON stream is useful.
 - Use history and trace commands only when the task needs correlation or an
   audit trail; they are not startup prerequisites.
+- To find a request that already happened, use `orbit trace --search <path or
+  text> --json` rather than paging the list, then `orbit trace <id> --json`
+  for span attributes (URL, route, SQL, database). Orbit's own health-probe
+  traces are hidden by default. Flags and fields: the repository's
+  `docs/agent-cli.md` (Traces).
 - Treat the JSON envelope's final state and actions as authoritative rather
   than inferring success from exit code or transport state.
 

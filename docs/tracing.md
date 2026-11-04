@@ -50,6 +50,8 @@ than silently moved). `orbit tracing status` shows the port actually in use.
 ```bash
 orbit trace                  # recent traces, newest first
 orbit trace -f               # stream new traces live as they arrive
+orbit trace --search item/1  # traces whose span names or attribute values match
+orbit trace --service api    # traces that include that service
 orbit trace --json           # structured list (for agents); with -f, NDJSON
 orbit trace <id>             # ASCII waterfall of one trace
 orbit trace <id> --logs      # waterfall + log lines carrying this trace id
@@ -61,6 +63,20 @@ When there are no traces to show, `orbit trace` explains why in terms of the
 receiver's real state — off, on-but-the-receiver-didn't-bind, or on-and-idle —
 so you can tell the three apart. `orbit tracing status` reports the same health
 on demand (and as `--json` for scripts/agents).
+
+Span labels are never clipped: the list prints the root span last, and the
+waterfall prints each label after its bar.
+
+### Health-probe traffic
+
+Orbit probes each HTTP health check every few seconds, and an instrumented
+service turns each probe into a trace. The probe sends the User-Agent
+`orbit-health-probe`; a trace counts as health traffic when its root span
+records that user agent, or — for instrumentation that does not record it —
+when the root span's route or path equals that resource's `health_check.path`.
+`orbit trace` and `GET /api/traces` hide such traces unless they errored, and
+the human list says how many it hid; `--include-health` (`?include_health=1`)
+shows them. The dashboard's list does not hide them yet.
 
 There is intentionally no `enable`/`disable` command: tracing is on by default,
 and opting a single env out is a one-line `enabled: false` edit — the same

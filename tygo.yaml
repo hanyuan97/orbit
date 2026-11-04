@@ -80,6 +80,7 @@ packages:
     exclude_files:
       - "tracing.go"
       - "otlp.go"
+      - "filter.go"
       - "tracing_test.go"
       - "otlp_test.go"
   - path: "github.com/iml885203/orbit/internal/dbstate"

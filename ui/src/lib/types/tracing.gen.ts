@@ -43,6 +43,12 @@ export interface TraceSummary {
   spanCount: number /* int */;
   services: string[]; // distinct service names, first-seen order
   status: string; // ok | error
+  /**
+   * Health marks Orbit's own health-probe traffic: the root span carries the
+   * probe's User-Agent, or its route/path equals the resource's configured
+   * health_check.path. Omitted when false.
+   */
+  health?: boolean;
 }
 /**
  * Trace is a full trace: the summary fields plus every span, sorted by start
@@ -59,6 +65,7 @@ export interface Trace {
   spanCount: number /* int */;
   services: string[];
   status: string;
+  health?: boolean;
   spans: Span[];
 }
 /**
