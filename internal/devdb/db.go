@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/iml885203/orbit/cli"
+	"github.com/iml885203/orbit/internal/dbstate"
 	"github.com/spf13/cobra"
 )
 
@@ -92,7 +94,11 @@ func runDBList(_ *cobra.Command, _ []string) error {
 	}
 
 	if cli.JSONOutput {
-		return cli.WriteJSONSuccess(os.Stdout, "orbit sqlserver list", resp, nil)
+		snap, err := fetchDBState(client)
+		if err != nil {
+			return err
+		}
+		return cli.WriteJSONSuccess(os.Stdout, "orbit sqlserver list", dbListJSON(resp.Projects, snap), nil)
 	}
 
 	if len(resp.Projects) == 0 {
@@ -111,4 +117,64 @@ func runDBList(_ *cobra.Command, _ []string) error {
 		}
 	}
 	return nil
+}
+
+// dbListJSONResult is the `sqlserver list --json` payload: the configured
+// projects as the daemon reports them, plus Orbit's operation record for
+// each configured database.
+type dbListJSONResult struct {
+	Projects       []DevDBProject    `json:"projects"`
+	PublishRecords []dbPublishRecord `json:"publish_records"`
+}
+
+// dbPublishRecord is Orbit's last-known record of its own operations on
+// one database — not a live check. Reset publishes a clean schema, so a
+// reset moves LastPublish too. The event keys carry no omitempty: a
+// consumer gets the same key set whether or not the event ever happened.
+type dbPublishRecord struct {
+	Database    string           `json:"database"`
+	Project     string           `json:"project"`
+	LastPublish *dbRecordedEvent `json:"last_publish"`
+	LastReset   *dbRecordedEvent `json:"last_reset"`
+	BaselineAt  *dbRecordedEvent `json:"baseline_at"`
+}
+
+// dbRecordedEvent is the CLI contract's snake_case form of dbstate.Event.
+type dbRecordedEvent struct {
+	At         time.Time      `json:"at"`
+	Source     dbstate.Source `json:"source"`
+	DurationMs int64          `json:"duration_ms,omitempty"`
+}
+
+// dbListJSON lists one record per configured database, in project order;
+// a database declared by two projects belongs to the first — the same
+// rule publishTargetsFrom gives `publish --all`. Records for databases no longer configured are left out.
+func dbListJSON(projects []DevDBProject, snap dbstate.Snapshot) dbListJSONResult {
+	records := []dbPublishRecord{}
+	seen := map[string]bool{}
+	for _, p := range projects {
+		for _, db := range p.Databases {
+			if seen[db] {
+				continue
+			}
+			seen[db] = true
+			state := snap.DBs[db]
+			records = append(records, dbPublishRecord{
+				Database:    db,
+				Project:     p.Name,
+				LastPublish: recordedEvent(state.LastPublish),
+				LastReset:   recordedEvent(state.LastReset),
+				BaselineAt:  recordedEvent(state.BaselineAt),
+			})
+		}
+	}
+	return dbListJSONResult{Projects: projects, PublishRecords: records}
+}
+
+// recordedEvent maps an absent event to nil so it marshals as null.
+func recordedEvent(e *dbstate.Event) *dbRecordedEvent {
+	if e == nil {
+		return nil
+	}
+	return &dbRecordedEvent{At: e.At, Source: e.Source, DurationMs: e.DurationMs}
 }

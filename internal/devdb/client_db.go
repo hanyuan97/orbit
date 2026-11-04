@@ -30,6 +30,25 @@ func fetchDevDBProjects(c *daemon.Client) (*DevDBProjectsResponse, error) {
 	return &result, nil
 }
 
+// fetchDBState returns the daemon's per-database operation record.
+func fetchDBState(c *daemon.Client) (dbstate.Snapshot, error) {
+	resp, err := c.Get("/api/db-state")
+	if err != nil {
+		return dbstate.Snapshot{}, fmt.Errorf("db-state request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return dbstate.Snapshot{}, daemon.ReadAPIError(resp)
+	}
+
+	var snap dbstate.Snapshot
+	if err := json.NewDecoder(resp.Body).Decode(&snap); err != nil {
+		return dbstate.Snapshot{}, fmt.Errorf("decoding db-state: %w", err)
+	}
+	return snap, nil
+}
+
 // resolveDBArgFromClient resolves a positional db/project argument to the
 // database(s) it names, fetching the project list through the daemon. It lets
 // publish/diff accept either a database name or a project name (see
