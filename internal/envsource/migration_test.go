@@ -152,3 +152,17 @@ func TestLegacyMigrationReportsPreservedStateOnce(t *testing.T) {
 		t.Fatalf("repeated migration result = %#v, want nil", repeated)
 	}
 }
+
+func TestLegacyMigrationKeepsTheSSHUsername(t *testing.T) {
+	registry, err := LoadMigratingLegacy(t.TempDir(), LegacyMigration{URL: "ssh://git@example.com/srv/envs.git", EnvsDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := registry.Get("default")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ssh://git@example.com/srv/envs.git"; source.URL != want {
+		t.Fatalf("migrated URL = %q, want %q", source.URL, want)
+	}
+}

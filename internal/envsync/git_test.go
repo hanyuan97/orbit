@@ -203,3 +203,25 @@ func TestCloneErrorRedactsAQueryTokenWhenTheURLDoesNotParse(t *testing.T) {
 		t.Fatalf("error leaks URL credentials: %v", err)
 	}
 }
+
+// Over SSH the username picks the account the server authenticates, so it is
+// not a credential: dropping it makes later syncs log in as the local user.
+// A password in an SSH URL is still one, as is any HTTP userinfo.
+func TestRedactURLKeepsTheSSHUsername(t *testing.T) {
+	tests := map[string]string{
+		"ssh://git@host/srv/repo.git":        "ssh://git@host/srv/repo.git",
+		"ssh://git:secret@host/srv/repo.git": "ssh://git@host/srv/repo.git",
+		"git+ssh://git@host:2222/repo.git":   "git+ssh://git@host:2222/repo.git",
+		"SSH+GIT://git:pw@host/repo.git":     "ssh+git://git@host/repo.git",
+		"ssh://git:bad%zz@host/repo.git":     "ssh://git@host/repo.git",
+		"ssh://host/repo.git":                "ssh://host/repo.git",
+		"ssh://:pw@host/repo.git":            "ssh://host/repo.git",
+		"ssh://:bad%zz@host/repo.git":        "ssh://host/repo.git",
+		"https://secret-token@host/repo.git": "https://host/repo.git",
+	}
+	for raw, want := range tests {
+		if got := RedactURL(raw); got != want {
+			t.Errorf("RedactURL(%q) = %q, want %q", raw, got, want)
+		}
+	}
+}

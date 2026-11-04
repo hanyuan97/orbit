@@ -123,7 +123,7 @@ func displayURL(raw string) string {
 	if parsed.User == nil && !(remote && (parsed.RawQuery != "" || parsed.ForceQuery)) {
 		return raw
 	}
-	parsed.User = nil
+	parsed.User = sshLogin(parsed.Scheme, parsed.User)
 	if remote {
 		parsed.RawQuery = ""
 		parsed.ForceQuery = false
@@ -132,8 +132,9 @@ func displayURL(raw string) string {
 }
 
 // stripUnparsedCredentials still hides credentials when url.Parse rejects the
-// URL, for example a password with a bad percent-escape. SCP-style remotes
-// (git@host:path) have no "://" and carry no secret, so they pass through.
+// URL, for example a password with a bad percent-escape. Like displayURL it
+// keeps an SSH username (see sshLogin). SCP-style remotes (git@host:path)
+// have no "://" and carry no secret, so they pass through.
 func stripUnparsedCredentials(raw string) string {
 	scheme, rest, found := strings.Cut(raw, "://")
 	if !found {
@@ -141,11 +142,15 @@ func stripUnparsedCredentials(raw string) string {
 	}
 	authority, path, hasPath := strings.Cut(rest, "/")
 	// Userinfo goes first: a password may itself contain "?".
+	login := ""
 	if at := strings.LastIndex(authority, "@"); at >= 0 {
+		if username, _, _ := strings.Cut(authority[:at], ":"); username != "" && isSSHScheme(scheme) {
+			login = username + "@"
+		}
 		authority = authority[at+1:]
 	}
 	authority, _, inAuthority := strings.Cut(authority, "?")
-	redacted := scheme + "://" + authority
+	redacted := scheme + "://" + login + authority
 	if hasPath && !inAuthority {
 		path, _, _ = strings.Cut(path, "?")
 		redacted += "/" + path
@@ -153,9 +158,30 @@ func stripUnparsedCredentials(raw string) string {
 	return redacted
 }
 
-// RedactURL removes the credentials a remote URL can carry: userinfo, and the
-// query of an absolute URL. Git never sends a query to a smart-HTTP remote
-// intact (it appends /info/refs after it), so dropping it loses nothing.
+// sshLogin keeps only the username of an SSH URL: it selects the account the
+// server authenticates, and without it ssh logs in as the local user, which
+// hosts that accept only a fixed user such as git@ reject. Any other scheme's
+// username can be a token (https://<token>@host), so it goes.
+func sshLogin(scheme string, user *url.Userinfo) *url.Userinfo {
+	if user == nil || user.Username() == "" || !isSSHScheme(scheme) {
+		return nil
+	}
+	return url.User(user.Username())
+}
+
+// isSSHScheme reports the schemes Git routes over its SSH transport.
+func isSSHScheme(scheme string) bool {
+	switch strings.ToLower(scheme) {
+	case "ssh", "git+ssh", "ssh+git":
+		return true
+	}
+	return false
+}
+
+// RedactURL removes the credentials a remote URL can carry: userinfo other
+// than an SSH username, and the query of an absolute URL. Git never sends a
+// query to a smart-HTTP remote intact (it appends /info/refs after it), so
+// dropping it loses nothing.
 func RedactURL(raw string) string {
 	return displayURL(raw)
 }
