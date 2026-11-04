@@ -249,6 +249,11 @@ init 會回傳 `service_working_directory_missing`，並說明需移除 source�
 確認 URL 正確且 repo 為 private 後才進行 Git 認證。能明確判定的認證失敗仍
 使用 `env_repo_access`。
 
+`orbit source add` 首次同步失敗時不會登記任何 source，因此它的
+`env_repo_access` recovery 是重試 `orbit source add <name> --url <url> --json`，
+而不是 `orbit source sync --json`。URL 中的 credentials 會從重試指令與訊息中移除；
+GitHub 認證與安裝 Git 的步驟維持不變。
+
 已轉換控制指令的穩定 `data.operation` 值：
 
 穩定的 `data.operation` 值只維護一份完整清單，見英文版

@@ -23,7 +23,7 @@ import (
 // doctor" on every unrecognised error is noise, and points away from the
 // real fix as often as toward it.
 func HumanGuidance(err error) (message, hint, nextCommand string) {
-	classified := classify(err)
+	classified := classifyRecovery(err)
 	if classified.Code == "command_failed" {
 		return "", "", ""
 	}

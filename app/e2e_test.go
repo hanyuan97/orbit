@@ -2693,9 +2693,9 @@ func TestE2E_SourceAddClassifiesRepositoryAccessFailure(t *testing.T) {
 	if envelope.Error == nil || envelope.Error.Code != "env_repo_access" {
 		t.Fatalf("error = %+v:\n%s", envelope.Error, output)
 	}
-	// #204 replaces this recovery: nothing was registered, so source sync
-	// has no source to retry. Pinned so that change updates the test.
-	if len(envelope.RecommendedActions) != 1 || envelope.RecommendedActions[0].Command != "orbit source sync --json" {
+	// Nothing was registered, so the recovery retries the add, not source sync.
+	retry := "orbit source add team --url " + missingRepo + " --json"
+	if len(envelope.RecommendedActions) != 1 || envelope.RecommendedActions[0].Command != retry {
 		t.Fatalf("recommended_actions = %+v", envelope.RecommendedActions)
 	}
 }
@@ -2722,7 +2722,7 @@ func TestE2E_SourceAddExplainsMissingGitAtTheSyncBoundary(t *testing.T) {
 		}
 	}
 	if len(envelope.RecommendedActions) != 1 ||
-		envelope.RecommendedActions[0].Command != "orbit source sync --json" { // #204 replaces this recovery
+		envelope.RecommendedActions[0].Command != "orbit source add team --url https://example.invalid/environments.git --json" {
 		t.Fatalf("recommended_actions = %+v", envelope.RecommendedActions)
 	}
 }

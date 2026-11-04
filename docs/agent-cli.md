@@ -360,6 +360,11 @@ automatically log in or retry unchanged. Verify the owner and repository name
 first; authenticate Git only after confirming that the URL is correct and
 private. Unambiguous authentication failures remain `env_repo_access`.
 
+A failed `orbit source add` registers nothing, so its `env_repo_access`
+recovery retries `orbit source add <name> --url <url> --json` instead of
+`orbit source sync --json`. Credentials in the URL are removed from the retry
+and the message; the GitHub-auth and install-Git steps stay.
+
 Stable `data.operation` values for converted control commands:
 
 | Command | `data.operation` |

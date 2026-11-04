@@ -167,7 +167,7 @@ environments from this source.`,
 			}
 			source, result, err := envsource.Refresh(registry, source, daemon.OrbitDir(), false, false)
 			if err != nil {
-				return sourceSyncError(source, err)
+				return sourceAddSyncError(source, err)
 			}
 			if err := registry.Add(source); err != nil {
 				_ = os.RemoveAll(envsource.SourceDir(daemon.OrbitDir(), source.Name))
@@ -442,6 +442,30 @@ func sourceSyncError(source envsource.Source, err error) error {
 		return fmt.Errorf("synchronize source %s: %w", source.Name, envRepoSyncError(err))
 	}
 	return fmt.Errorf("synchronize source %s: %w", source.Name, err)
+}
+
+// sourceAddSyncError recovers a failed first sync. The source was never
+// registered, so `orbit source sync` has nothing to retry; the recovery
+// replays the add instead.
+func sourceAddSyncError(source envsource.Source, err error) error {
+	if source.Type != envsource.TypeGit {
+		return sourceSyncError(source, err)
+	}
+	return fmt.Errorf("synchronize source %s: %w", source.Name,
+		envRepoAccessError(err, sourceAddCommand(source), cli.WithJSONReplacementActions))
+}
+
+// sourceAddCommand rebuilds the add for a git source without URL credentials,
+// because the command is echoed into messages and recommended actions.
+func sourceAddCommand(source envsource.Source) string {
+	args := []string{"orbit", "source", "add", shellquote.Quote(source.Name), "--url", shellquote.Quote(envsync.RedactURL(source.URL))}
+	if source.Ref != "" {
+		args = append(args, "--ref", shellquote.Quote(source.Ref))
+	}
+	if source.Workspace != "" {
+		args = append(args, "--workspace", shellquote.Quote(source.Workspace))
+	}
+	return strings.Join(args, " ")
 }
 
 func applySourceWorkspace(configPath string) error {
