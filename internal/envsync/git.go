@@ -139,13 +139,15 @@ func stripUnparsedCredentials(raw string) string {
 	if !found {
 		return raw
 	}
-	rest, _, _ = strings.Cut(rest, "?")
 	authority, path, hasPath := strings.Cut(rest, "/")
+	// Userinfo goes first: a password may itself contain "?".
 	if at := strings.LastIndex(authority, "@"); at >= 0 {
 		authority = authority[at+1:]
 	}
+	authority, _, inAuthority := strings.Cut(authority, "?")
 	redacted := scheme + "://" + authority
-	if hasPath {
+	if hasPath && !inAuthority {
+		path, _, _ = strings.Cut(path, "?")
 		redacted += "/" + path
 	}
 	return redacted

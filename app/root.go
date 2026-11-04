@@ -556,9 +556,9 @@ func commandString() string {
 
 // redactArgURL hides URL credentials in an argument echoed into the JSON
 // envelope and CLI history, whether it is a bare URL or a --flag=URL value.
-// Arguments with whitespace, such as a SQL query, are left as typed. The echo
-// is never replayed and any query may carry a token, so dropping a URL's query
-// here loses nothing either.
+// Arguments with whitespace, such as a SQL query, are left as typed. Some
+// recovery actions replay this echo, and a replayed URL loses only its query,
+// which Git cannot use (see envsync.RedactURL).
 func redactArgURL(arg string) string {
 	if strings.HasPrefix(arg, "-") {
 		if flag, value, ok := strings.Cut(arg, "="); ok {

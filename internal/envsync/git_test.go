@@ -152,6 +152,8 @@ func TestRedactURLHidesCredentialsEvenWhenTheURLDoesNotParse(t *testing.T) {
 		"https://user:p@ss@exa mple.com":                       "https://exa mple.com",
 		"git@github.com:example/env.git":                       "git@github.com:example/env.git",
 		"https://user:bad%zz@host/env.git?access_token=secret": "https://host/env.git",
+		"https://user:pa?ss@host/repo":                         "https://host/repo",
+		"https://user:p%zz?q@host/r":                           "https://host/r",
 	}
 	for raw, want := range tests {
 		if got := RedactURL(raw); got != want {
