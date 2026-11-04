@@ -28,7 +28,10 @@ orbit instance list --json
 Consume the resolved endpoints returned by Orbit; a named instance may relocate
 declared host ports. JSON recommended actions retain the instance target.
 `orbit instance clean <name> --json` stops and removes that instance's local
-state and Docker resources, so run it only when disposal is in scope.
+state and Docker resources, so run it only when disposal is in scope. It does
+not need the instance's config. Report any `data.skipped_processes` to the user
+rather than killing those PIDs: Orbit could not prove they still belong to the
+instance.
 For temporary evaluations, decide before startup whether evidence and local data
 must be preserved. When the user has authorized disposal after verification,
 finish with `orbit instance clean <name> --json` instead of leaving the named

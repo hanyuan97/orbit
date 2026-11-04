@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -9,9 +10,12 @@ import (
 	"time"
 
 	"github.com/iml885203/orbit/cli"
+	"github.com/iml885203/orbit/config"
 	"github.com/iml885203/orbit/container"
 	"github.com/iml885203/orbit/daemon"
 	"github.com/iml885203/orbit/instance"
+	daemonsrv "github.com/iml885203/orbit/internal/daemon"
+	"github.com/iml885203/orbit/process"
 	"github.com/spf13/cobra"
 )
 
@@ -126,18 +130,9 @@ func runInstanceClean(_ *cobra.Command, args []string) error {
 	if _, err := instance.Activate(name); err != nil {
 		return cli.NewInvalidArgumentError(err.Error())
 	}
-	client, err := daemon.EnsureDaemon(manifest.ConfigPath, nil)
+	skipped, err := stopInstanceRuntime(context.Background())
 	if err != nil {
-		return renderDaemonStartError(err)
-	}
-	if _, err := client.DownAndWait(); err != nil {
-		return fmt.Errorf("stopping instance resources: %w", err)
-	}
-	pid, alive := daemon.IsDaemonRunning()
-	if alive {
-		if _, err := stopDaemon(pid); err != nil {
-			return err
-		}
+		return err
 	}
 	if err := container.PurgeNamespace(context.Background(), manifest.Namespace); err != nil {
 		return fmt.Errorf("removing instance Docker resources: %w", err)
@@ -148,17 +143,81 @@ func runInstanceClean(_ *cobra.Command, args []string) error {
 	if err := sweepInstanceHome(baseHome, name); err != nil {
 		fmt.Fprintf(os.Stderr, "note: instance home for %q left behind: %v\n", name, err)
 	}
-	return reportInstanceCleaned(name)
+	return reportInstanceCleaned(name, skipped...)
 }
 
-// sweepInstanceHome removes the empty directory left behind by the daemon that
-// `clean` has to start in order to stop the instance's resources.
+// skippedProcess is a recorded PID that clean left running because the live
+// process no longer provably belongs to the instance.
+type skippedProcess struct {
+	Service string `json:"service"`
+	PID     int    `json:"pid"`
+	Reason  string `json:"reason"`
+}
+
+// stopInstanceRuntime stops what the activated instance still runs using only
+// its home, never its config: an old instance's config often lived in a
+// checkout or temp directory that no longer exists. A healthy daemon stops its
+// own resources. Without one, the processes a dead daemon recorded are retired
+// directly, since starting a daemon just to clean would need that config.
+func stopInstanceRuntime(ctx context.Context) ([]skippedProcess, error) {
+	client, err := daemon.ConnectRunningDaemon(ctx)
+	if err != nil {
+		return nil, renderDaemonStartError(err)
+	}
+	if client == nil {
+		return retireRecordedProcesses()
+	}
+	if _, err := client.DownAndWait(); err != nil {
+		return nil, fmt.Errorf("stopping instance resources: %w", err)
+	}
+	if pid, alive := daemon.IsDaemonRunning(); alive {
+		if _, err := stopDaemon(pid); err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+// retireRecordedProcesses stops service processes a dead daemon left in
+// state.json. Graceful shutdown persists state before stopping services, so
+// these PIDs are usually stale and may by now belong to unrelated processes;
+// process.RetireRecorded signals only the ones it can prove are the service.
+func retireRecordedProcesses() ([]skippedProcess, error) {
+	state, err := daemonsrv.NewStateFile(daemonsrv.DefaultStatePath()).Read()
+	if err != nil {
+		return nil, fmt.Errorf("reading instance state: %w", err)
+	}
+	names := make([]string, 0, len(state.Processes))
+	for name := range state.Processes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var skipped []skippedProcess
+	for _, name := range names {
+		record := state.Processes[name]
+		_, err := process.RetireRecorded(process.RecordedProcess{
+			Name: name, PID: record.PID, PGID: record.PGID, Command: record.Command, Dir: record.Dir,
+		}, config.DefaultShutdownTimeout)
+		var mismatch *process.OwnershipMismatchError
+		switch {
+		case errors.As(err, &mismatch):
+			skipped = append(skipped, skippedProcess{Service: name, PID: record.PID, Reason: mismatch.Reason})
+		case err != nil:
+			// One stuck group must not keep the instance's Docker resources
+			// and home around; report it alongside the unproven ones.
+			skipped = append(skipped, skippedProcess{Service: name, PID: record.PID, Reason: err.Error()})
+		}
+	}
+	return skipped, nil
+}
+
+// sweepInstanceHome removes the empty instance directory, retrying for the
+// case where clean stopped a running daemon.
 //
-// One pass is not enough. waitForDaemonStop returns when the pid stops being
-// alive, and a daemon can still land a last write after that — so the sweep
-// can find nothing, and the directory appears a moment later. Only instances
-// that actually ran a daemon show it: one created but never started cleans in
-// a single pass.
+// One pass is not enough then. waitForDaemonStop returns when the pid stops
+// being alive, and a daemon can still land a last write after that — so the
+// sweep can find nothing, and the directory appears a moment later. When no
+// daemon was running the first passes already find the directory gone.
 //
 // Retrying beats waiting longer because there is nothing to wait *for* that
 // the process table exposes. A few short passes cover the window; if the
@@ -191,9 +250,16 @@ func sweepInstanceHome(baseHome, name string) error {
 	return lastErr
 }
 
-func reportInstanceCleaned(name string) error {
+func reportInstanceCleaned(name string, skipped ...skippedProcess) error {
 	if cli.JSONOutput {
-		return cli.WriteJSONSuccess(os.Stdout, commandString(), map[string]any{"instance": name, "removed": true}, nil)
+		data := map[string]any{"instance": name, "removed": true}
+		if len(skipped) > 0 {
+			data["skipped_processes"] = skipped
+		}
+		return cli.WriteJSONSuccess(os.Stdout, commandString(), data, nil)
+	}
+	for _, item := range skipped {
+		fmt.Fprintf(os.Stderr, "note: left pid %d running for service %q (%s); stop it yourself if it is still that service\n", item.PID, item.Service, item.Reason)
 	}
 	fmt.Printf("Cleaned instance %q.\n", name)
 	return nil
