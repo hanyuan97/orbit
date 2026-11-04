@@ -725,8 +725,8 @@ func logsCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  runLogs,
 	}
-	cmd.Flags().IntVar(&logLines, "lines", 100, "number of log lines to show")
-	cmd.Flags().IntVar(&logLines, "tail", 100, "number of log lines to show (alias for --lines)")
+	cmd.Flags().IntVar(&logLines, "lines", 100, "number of log lines to show; with --follow, shown before streaming")
+	cmd.Flags().IntVar(&logLines, "tail", 100, "alias for --lines")
 	cmd.MarkFlagsMutuallyExclusive("lines", "tail")
 	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "stream logs in real-time")
 	return cmd
@@ -1016,7 +1016,7 @@ func runLogs(_ *cobra.Command, args []string) error {
 
 	if follow {
 		if cli.JSONOutput {
-			if err := client.StreamLogs(name, func(line string) {
+			if err := client.StreamLogs(name, logLines, func(line string) {
 				_ = writeLogJSONEvent(os.Stdout, name, line)
 			}); err != nil {
 				if writeErr := writeLogJSONErrorEvent(os.Stdout, name, err); writeErr != nil {
@@ -1027,7 +1027,7 @@ func runLogs(_ *cobra.Command, args []string) error {
 			return nil
 		}
 		fmt.Printf("Streaming logs for %s (Ctrl+C to stop)...\n", name)
-		return client.StreamLogs(name, func(line string) {
+		return client.StreamLogs(name, logLines, func(line string) {
 			fmt.Println(line)
 		})
 	}
