@@ -228,6 +228,7 @@ export default defineConfig({
     '.claude/**',
     '.agents/**',
     'plugins/**',
+    'integrations/**',
     'ui/**',
     'website/**',
     'README.md',
