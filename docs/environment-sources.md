@@ -67,7 +67,14 @@ orbit init --source company --url https://github.com/example/company-environment
   --workspace /work/company --env e2e --yes
 orbit init --source env-dev --path /work/orbit-environments \
   --workspace /work/company --env e2e --yes
+orbit init --source company --env e2e --yes
 ```
+
+Naming a registered source without `--url` or `--path` re-syncs it as
+registered; `--ref` (Git sources only) and `--workspace` replace the stored
+values once the sync succeeds. Naming an unregistered source without a location
+registers the default repository (the official demo unless overridden) under
+that name, as a first bare `orbit init` does.
 
 Existing single-repository settings, cached environments, selection, and
 workspace migrate once to `default` without network access. Orbit reports what

@@ -59,7 +59,13 @@ orbit init --source company --url https://github.com/example/company-environment
   --workspace /work/company --env e2e --yes
 orbit init --source env-dev --path /work/orbit-environments \
   --workspace /work/company --env e2e --yes
+orbit init --source company --env e2e --yes
 ```
+
+指定已註冊的 source 而不帶 `--url` 或 `--path` 時，會依註冊內容重新同步；
+`--ref`（僅限 Git source）與 `--workspace` 會在同步成功後取代已儲存的值。
+指定未註冊的 source 而不帶位置時，會像首次執行單純的 `orbit init` 一樣，以該名稱
+註冊預設 repository（未覆寫時為官方 demo）。
 
 既有單一 repository 設定、cached environments、selection 與 workspace 會在
 無網路時一次遷移到 `default`。Orbit 會回報保留了哪些狀態，並建議檢查及同步
