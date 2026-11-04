@@ -166,6 +166,9 @@ unset ORBIT_DASHBOARD_PORT
 orbit daemon restart
 ```
 
+Named instances pick their own dashboard port; see
+[Isolation and ports](instances.md#isolation-and-ports).
+
 ### After upgrading, Orbit says an update is ready
 This normally means the binary was replaced manually; `orbit update` reconnects
 a running environment automatically. In the dashboard, select **Restart now**;
