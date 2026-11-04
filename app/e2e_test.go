@@ -2714,16 +2714,27 @@ func TestE2E_InitRetriesALocalSourceThatFailedItsFirstSync(t *testing.T) {
 // than pinning the release's demo URL and ref.
 func TestE2E_BareInitRetriesAsItself(t *testing.T) {
 	binary := findOrbitBinary(t)
+	env := append(os.Environ(), "ORBIT_HOME="+t.TempDir(), "PATH="+t.TempDir())
 	command := exec.Command(binary, "init", "--yes", "--json")
 	command.Dir = t.TempDir()
-	command.Env = append(os.Environ(), "ORBIT_HOME="+t.TempDir(), "PATH="+t.TempDir())
+	command.Env = env
 	output, err := command.Output()
 	if err == nil {
 		t.Fatalf("init without git succeeded:\n%s", output)
 	}
 	envelope := parseE2EEnvelope(t, string(output))
-	if envelope.Error == nil || envelope.Error.NextCommand != "orbit init --yes --json" {
+	if envelope.Error == nil || envelope.Error.NextCommand != "orbit init --yes --json" ||
+		!strings.Contains(envelope.Error.Message, "retry `orbit init --yes`") ||
+		strings.Contains(envelope.Error.Message, "orbit source sync") {
 		t.Fatalf("error = %+v", envelope.Error)
+	}
+
+	human := exec.Command(binary, "init", "--yes")
+	human.Dir = t.TempDir()
+	human.Env = env
+	humanOutput, _ := human.CombinedOutput()
+	if n := bytes.Count(humanOutput, []byte("Next: ")); n != 1 || !bytes.Contains(humanOutput, []byte("Next: orbit init --yes\n")) {
+		t.Fatalf("human output must name one retry, orbit init --yes:\n%s", humanOutput)
 	}
 }
 

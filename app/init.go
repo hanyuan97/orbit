@@ -286,13 +286,14 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			if persist {
 				err = sourceSyncError(source, err)
-			} else if explicit || initSource != "" || initPath != "" || initWorkspace != "" {
-				result.retry = initSourceCommand(source, initEnvName)
-				err = firstSyncError(source, err, result.retry)
 			} else {
 				// Bare init rebuilds the same default source, and replaying it
 				// unpinned keeps the quickstart and its current demo ref.
-				err = sourceSyncError(source, err)
+				result.retry = "orbit init --yes"
+				if explicit || initSource != "" || initPath != "" || initWorkspace != "" {
+					result.retry = initSourceCommand(source, initEnvName)
+				}
+				err = firstSyncError(source, err, result.retry)
 			}
 			syncFailure = err
 			syncWarning = "source sync failed: " + err.Error()
