@@ -44,8 +44,16 @@ func parseProcArgs2(raw []byte) ([]string, error) {
 // process title (npm, nginx) overwrites the argv area with one space-joined
 // string and NUL padding, so that shape is split back into words. A single
 // real argument ends in one NUL and keeps its spaces.
+//
+// The file is briefly empty while exec replaces the process image, and stays
+// empty for zombies and kernel threads. That is no argv rather than one empty
+// argument, so a caller waiting for exec does not mistake it for a program.
 func parseProcCmdline(raw []byte) []string {
-	args := strings.Split(strings.TrimRight(string(raw), "\x00"), "\x00")
+	trimmed := strings.TrimRight(string(raw), "\x00")
+	if trimmed == "" {
+		return nil
+	}
+	args := strings.Split(trimmed, "\x00")
 	if len(args) == 1 && bytes.HasSuffix(raw, []byte("\x00\x00")) {
 		return strings.Fields(args[0])
 	}

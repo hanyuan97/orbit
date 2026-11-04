@@ -56,10 +56,11 @@ func TestParseProcCmdline(t *testing.T) {
 		raw  string
 		want []string
 	}{
-		"argv":                       {"python3\x00server.py\x00", []string{"python3", "server.py"}},
-		"renamed title with padding": {"npm run dev\x00\x00\x00\x00", []string{"npm", "run", "dev"}},
-		"one argument with spaces":   {"/opt/my app/server\x00", []string{"/opt/my app/server"}},
-		"empty argument kept":        {"sh\x00\x00-x\x00", []string{"sh", "", "-x"}},
+		"argv":                        {"python3\x00server.py\x00", []string{"python3", "server.py"}},
+		"empty while exec is pending": {"", nil},
+		"renamed title with padding":  {"npm run dev\x00\x00\x00\x00", []string{"npm", "run", "dev"}},
+		"one argument with spaces":    {"/opt/my app/server\x00", []string{"/opt/my app/server"}},
+		"empty argument kept":         {"sh\x00\x00-x\x00", []string{"sh", "", "-x"}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
