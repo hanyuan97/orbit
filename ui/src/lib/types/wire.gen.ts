@@ -145,6 +145,17 @@ export interface ResourceStatus {
   role?: string;
   state: string;
   /**
+   * StartingPhase splits "starting" into "launching" (port check,
+   * pre_start, process exec or container start) and "probing" (waiting
+   * for readiness); empty in every other state.
+   */
+  starting_phase?: string;
+  /**
+   * PID is the managed host process's pid while Orbit supervises one;
+   * absent for containers and stopped services.
+   */
+  pid?: number /* int */;
+  /**
    * PendingDependencies identifies exactly what keeps a pending resource
    * from starting, so clients can distinguish useful waiting from a
    * terminal dependency failure.
@@ -206,7 +217,7 @@ export interface ResourcePortConflict {
 /**
  * HealthProgressInfo reports retry state for a resource that has a
  * configured health check. nil on ResourceStatus means the resource either
- * has no health check or has not yet attempted one (caller hides UI).
+ * has no health check or has not yet started a probe (caller hides UI).
  */
 export interface HealthProgressInfo {
   attempts: number /* int */;
@@ -218,6 +229,24 @@ export interface HealthProgressInfo {
    * CLI waits treat degraded+recovering as "still trying", not terminal.
    */
   recovering?: boolean;
+  /**
+   * ProbeStartedAt is present only while a probe is in flight; a value
+   * that keeps aging means the probe itself never returned.
+   */
+  probe_started_at?: string;
+  /**
+   * LastProbeAt is when the most recent probe returned. Its verdict is
+   * recorded before the result reaches the lifecycle, so a starting
+   * resource with an empty LastErr and no probe in flight passed its
+   * probe but never turned healthy.
+   */
+  last_probe_at?: string;
+  /**
+   * Protocol is the cleartext HTTP protocol the probe settled on: "h2c"
+   * or the HTTP/1.x version, such as "HTTP/1.1". Absent for other check
+   * types and HTTPS.
+   */
+  protocol?: string;
 }
 /**
  * LogsResponse is the response for GET /api/logs/{name}.

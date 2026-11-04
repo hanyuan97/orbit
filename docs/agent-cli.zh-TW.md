@@ -145,6 +145,24 @@ Orbit 還在等 container 變 healthy 時，若 container 停止，等待會立�
 `failed_resources` 找這筆，不要只看 `error.code`：相依的 resource 可能先被
 回報成 `dependency_blocked`。
 
+停在 `starting` 的 resource 會回報它停在哪裡。`starting_phase` 為
+`launching`（port 檢查、`pre_start`、啟動 process 或 container）或 `probing`
+（等待 readiness）。受監管的 host process 會帶 `pid`。`http`、`tcp`、`exec` 或
+`healthcheck` check 的 probe 一旦開始（`log` check 沒有 probe），`health_progress` 就帶 `attempts`、`max_retries`、`last_err`、`recovering`、
+`probe_started_at`（只在 probe 進行中出現）、`last_probe_at`（最近一次 probe
+返回的時間）與 `protocol`（cleartext HTTP check 為 `h2c` 或 HTTP/1.x 版本，
+例如 `HTTP/1.1`）。
+合起來判讀：
+
+- `probe_started_at` 一直變舊：probe 本身沒有返回。
+- 沒有進行中的 probe、`last_err` 為空、`last_probe_at` 很近，但仍是
+  `starting`：probe 已通過，但結果沒有生效。
+- `probing` 時兩個欄位都沒有：還沒有任何 probe 開始。
+
+要在不停止 daemon 的情況下取得它的 goroutine stack，對 daemon pid（`orbit
+inspect --json` 的 `data.daemon.pid`）送 `SIGUSR1`。dump 會附加到
+`daemon.log`。Windows 不支援。
+
 需要明確授權的破壞性步驟使用穩定的 `confirmation_required` 錯誤碼。被拒絕
 時什麼都不會改變；第一個 recommended action 就是加上 `--yes` 的同一個指令。
 只有在 caller（或其操作者）確實想要這個破壞性結果時才執行它。

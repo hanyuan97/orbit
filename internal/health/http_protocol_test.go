@@ -35,6 +35,9 @@ func TestHTTPProbeDiscoversAndCachesH2C(t *testing.T) {
 		if !result.Healthy {
 			t.Fatalf("h2c probe failed: %s", result.Message)
 		}
+		if result.Protocol != "h2c" {
+			t.Fatalf("Protocol = %q, want h2c", result.Protocol)
+		}
 	}
 	if got := requests.Load(); got != 2 {
 		t.Fatalf("requests = %d, want one per probe", got)
@@ -55,6 +58,9 @@ func TestHTTPProbeKeepsHTTP1CompatibilityAndCachesIt(t *testing.T) {
 		result := session.Check()
 		if !result.Healthy {
 			t.Fatalf("HTTP/1.1 probe failed: %s", result.Message)
+		}
+		if result.Protocol != "HTTP/1.1" {
+			t.Fatalf("Protocol = %q, want HTTP/1.1", result.Protocol)
 		}
 	}
 	if got := requests.Load(); got != 3 {
@@ -548,6 +554,25 @@ func TestCancelledDiscoveryLeaderDoesNotCancelWaiter(t *testing.T) {
 	}
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("h2c calls = %d, want shared discovery plus waiter request", got)
+	}
+}
+
+func TestWaitForHealthyRecordsSettledProtocolInProgress(t *testing.T) {
+	port := startH2CServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor != 2 {
+			http.Error(w, "h2c required", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	checker := NewChecker(nil, nil)
+	hc := &config.HealthCheckConfig{Type: "http", Port: port, Path: "/health", Interval: time.Second, Retries: 2}
+
+	if err := checker.WaitForHealthy(context.Background(), "basket-api", hc, nil); err != nil {
+		t.Fatalf("WaitForHealthy: %v", err)
+	}
+	if got := checker.Progress("basket-api").Protocol; got != "h2c" {
+		t.Fatalf("Progress.Protocol = %q, want h2c", got)
 	}
 }
 

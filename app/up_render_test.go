@@ -78,6 +78,20 @@ func TestRenderLines_OmitsHealthColumnsWhenNoProgress(t *testing.T) {
 	}
 }
 
+func TestRenderLines_OmitsHealthColumnsWhileFirstProbeIsInFlight(t *testing.T) {
+	started := time.Unix(0, 0)
+	snapshots := map[string]progressSnapshot{
+		"a": {state: "starting"},
+	}
+	progress := map[string]*daemon.HealthProgressInfo{
+		"a": {ProbeStartedAt: &started},
+	}
+	lines := renderLines(snapshots, progress, started, 0)
+	if strings.Contains(lines[0], "health") {
+		t.Errorf("line should omit health column before any attempt finishes, got %q", lines[0])
+	}
+}
+
 func TestRenderLines_ShowsAttemptsAndLastErrWhenProgressPresent(t *testing.T) {
 	now := time.Unix(0, 0)
 	snapshots := map[string]progressSnapshot{

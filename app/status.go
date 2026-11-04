@@ -504,6 +504,8 @@ type jsonService struct {
 	Kind                 string                       `json:"kind"`
 	Role                 string                       `json:"role,omitempty"`
 	State                string                       `json:"state"`
+	StartingPhase        string                       `json:"starting_phase,omitempty"`
+	PID                  int                          `json:"pid,omitempty"`
 	StateReason          string                       `json:"state_reason,omitempty"`
 	FailureKind          string                       `json:"failure_kind,omitempty"`
 	FailureEvidence      string                       `json:"failure_evidence,omitempty"`
@@ -520,6 +522,7 @@ type jsonService struct {
 	RestartCount         int                          `json:"restart_count"`
 	ExternalRestartCount int                          `json:"external_restart_count"`
 	LastRestart          *daemon.ResourceRestart      `json:"last_restart,omitempty"`
+	HealthProgress       *daemon.HealthProgressInfo   `json:"health_progress,omitempty"`
 }
 
 type daemonStatus struct {
@@ -777,6 +780,9 @@ func printEnvironmentSelectionRecovery(selection environmentSelection) {
 
 func applyRuntimeStatus(target *jsonService, source daemon.ResourceStatus, running map[string]daemon.ResourceStatus) {
 	target.State = source.State
+	target.StartingPhase = source.StartingPhase
+	target.PID = source.PID
+	target.HealthProgress = source.HealthProgress
 	if source.Role != "" {
 		target.Role = source.Role
 	}

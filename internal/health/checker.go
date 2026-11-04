@@ -168,11 +168,22 @@ func (s *ProbeSession) checkHTTP(ctx context.Context, hc *config.HealthCheckConf
 
 	healthy := resp.StatusCode >= 200 && resp.StatusCode < 300
 	return Result{
-		Service: s.name,
-		Healthy: healthy,
-		Message: fmt.Sprintf("HTTP %d from %s", resp.StatusCode, url),
-		Latency: time.Since(start),
+		Service:  s.name,
+		Healthy:  healthy,
+		Message:  fmt.Sprintf("HTTP %d from %s", resp.StatusCode, url),
+		Latency:  time.Since(start),
+		Protocol: cleartextProtocol(scheme, resp),
 	}
+}
+
+func cleartextProtocol(scheme string, resp *http.Response) string {
+	if scheme != "http" {
+		return ""
+	}
+	if resp.ProtoMajor == 2 {
+		return ProtocolH2C
+	}
+	return resp.Proto
 }
 
 func (c *Checker) checkTCP(ctx context.Context, name string, hc *config.HealthCheckConfig, start time.Time) Result {
@@ -283,16 +294,21 @@ func (c *Checker) pollWithProbe(ctx context.Context, name string, hc *config.Hea
 	var last Result
 	for {
 		attempt := schedule.attempt()
-		result := probe(ctx)
+		result := c.trackProbe(name, func() Result { return probe(ctx) })
 		last = result
+		// Record before delivering: a callback that never returns must
+		// still leave the probe's verdict visible in status.
+		var probeErr error
+		if !result.Healthy {
+			probeErr = errResult(result)
+		}
+		c.recordProgress(name, true, attempt, retries, probeErr)
 		if onResult != nil {
 			onResult(result)
 		}
 		if result.Healthy {
-			c.recordProgress(name, true, attempt, retries, nil)
 			return nil
 		}
-		c.recordProgress(name, true, attempt, retries, errResult(result))
 		if !schedule.advanceFrom(time.Since(start)) {
 			break
 		}
@@ -404,7 +420,7 @@ func (s *ProbeSession) RecoverHealthy(onResult func(Result)) error {
 			return s.ctx.Err()
 		case <-ticker.C:
 		}
-		result := s.Check()
+		result := s.checker.trackProbe(s.name, s.Check)
 		// A probe in flight across a stop/restart can report success after
 		// cancellation (checkTCP dials without honoring ctx) — re-check so
 		// a cancelled loop never reports a recovery it no longer owns.
@@ -454,7 +470,7 @@ func (s *ProbeSession) MonitorHealthy(onResult func(Result)) error {
 			return s.ctx.Err()
 		case <-ticker.C:
 		}
-		result := s.Check()
+		result := s.checker.trackProbe(s.name, s.Check)
 		if s.ctx.Err() != nil {
 			return s.ctx.Err()
 		}
