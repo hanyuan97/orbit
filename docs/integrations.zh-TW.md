@@ -15,15 +15,11 @@ Orbit for Orca plugin 會在 Orca 右側 sidebar 加入一個唯讀的 Orbit 狀
 - 每個 instance 的 containers 與 services；
 - 其 SQL projects 的同步狀態。
 
-需要 Orbit 0.16.10 以上（`orbit` 需在 `PATH` 中）與 Orca 1.4.247 以上。
+需要 Orbit 0.16.10 以上、Orca 1.4.247 以上，且 `orbit` 在 `PATH` 中。
 
-安裝與使用：
-
-1. 在 Orca 開啟 Settings → Plugins，從 marketplace 安裝 Orbit for Orca，
-   其頁面為
-   [onorca.dev/plugins/iml885203/orca-orbit](https://www.onorca.dev/plugins/iml885203/orca-orbit)。
-   也可以 clone [plugin repository](https://github.com/iml885203/orca-orbit)，
-   再執行 `orca plugin dev load <dir>`。
+1. 在 Orca 開啟 Settings → Plugins → Add → "From a Git URL…"，輸入
+   `https://github.com/iml885203/orca-orbit`，並確認 plugin 的權限。它只要求
+   `workspace:read`，用來找出 log 分頁要開在哪個 workspace。
 2. 從 Orca 右側 sidebar 開啟 Orbit 面板。
 3. 選取 instance 查看其 resources 與 SQL 狀態。在 resource 上按 Enter 或雙擊，
    即可在 terminal 分頁開啟它的 logs。

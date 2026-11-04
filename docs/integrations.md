@@ -16,17 +16,13 @@ Orca's right sidebar. The panel shows:
 - each instance's containers and services;
 - the sync status of its SQL projects.
 
-It requires Orbit 0.16.10 or newer, with `orbit` on your `PATH`, and Orca
-1.4.247 or newer.
+It requires Orbit 0.16.10 or newer, Orca 1.4.247 or newer, and `orbit` on
+your `PATH`.
 
-To install and use it:
-
-1. In Orca, open Settings, then Plugins, and install Orbit for Orca from the
-   marketplace. Its listing is
-   [onorca.dev/plugins/iml885203/orca-orbit](https://www.onorca.dev/plugins/iml885203/orca-orbit).
-   As a fallback, clone
-   [the plugin repository](https://github.com/iml885203/orca-orbit) and run
-   `orca plugin dev load <dir>`.
+1. In Orca, open Settings → Plugins → Add → "From a Git URL…", enter
+   `https://github.com/iml885203/orca-orbit`, and confirm the plugin's
+   permission. It asks only for `workspace:read`, which it uses to find the
+   workspace the log tab opens in.
 2. Open the Orbit panel from Orca's right sidebar.
 3. Select an instance to see its resources and SQL status. Press Enter on a
    resource, or double-click it, to open its logs in a terminal tab.
