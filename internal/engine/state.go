@@ -131,8 +131,8 @@ type ExternalContainerRestart struct {
 type ContainerObservation struct {
 	ID      string
 	Running bool
-	// ListedAt is when Docker was asked for the poll's container list; zero
-	// means the observation is current.
+	// ListedAt is when Docker was asked for the poll's container list. Zero
+	// skips the staleness check, for observations not taken from a poll.
 	ListedAt time.Time
 	// StartedAt is zero when the container never started or Docker could not
 	// inspect it; Exit is only Docker's account when StartedAt is set.
@@ -314,11 +314,13 @@ func (i *ServiceInfo) settleEndedRuntime(obs ContainerObservation) {
 	}
 }
 
-// predates reports whether a poll listed Docker's containers before the
-// service last changed state. Applying that snapshot would undo an Orbit
-// lifecycle step that finished while the poll was in flight.
+// predates reports whether a poll listed Docker's containers no later than
+// the service last changed state. Applying that snapshot would undo an Orbit
+// lifecycle step that finished while the poll was in flight, so the whole
+// observation waits for the next poll, external-restart evidence included.
+// A tie counts as stale because a coarse clock cannot order the two.
 func (i *ServiceInfo) predates(listedAt time.Time) bool {
-	return !listedAt.IsZero() && listedAt.Before(i.stateChangedAt)
+	return !listedAt.IsZero() && !i.stateChangedAt.IsZero() && !i.stateChangedAt.Before(listedAt)
 }
 
 // MarkRestart bumps the restart counter. Called by RestartService;

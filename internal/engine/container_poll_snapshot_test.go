@@ -39,6 +39,7 @@ func startHeldDockerList(t *testing.T, held, current string) (*heldDockerList, *
 				return
 			}
 			_, _ = w.Write([]byte(current))
+		// c1 exists only while the current list still shows it.
 		case strings.HasSuffix(r.URL.Path, "/containers/c1/json") && current != "[]":
 			_, _ = w.Write([]byte(`{"Id":"c1","State":{"Status":"running","Running":true,"StartedAt":"2026-11-04T00:00:00Z"}}`))
 		default:
@@ -140,8 +141,8 @@ func TestPollListedBeforeContainerStopKeepsItStopped(t *testing.T) {
 func TestPassingProbesDoNotHideContainerRemoval(t *testing.T) {
 	o := newTestOrchestrator(twoContainerCfg())
 	o.OnContainerSeen("redis", true)
-	listedAt := time.Now()
 	o.mu.Lock()
+	listedAt := o.services["redis"].stateChangedAt.Add(time.Nanosecond)
 	o.services["redis"].Transition(StateHealthy) // a passing runtime probe
 	o.mu.Unlock()
 
