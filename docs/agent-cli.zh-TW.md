@@ -253,6 +253,11 @@ init 會回傳 `service_working_directory_missing`，並說明需移除 source�
 `env_repo_access` recovery 是重試 `orbit source add <name> --url <url> --json`，
 而不是 `orbit source sync --json`。URL 中的 credentials 會從重試指令與訊息中移除；
 GitHub 認證與安裝 Git 的步驟維持不變。
+`orbit init` 也只在新 source 首次同步成功後才登記它，因此以 flags 指定的
+source 首次同步失敗時（`env_repo_access` 或 `init_incomplete`），會以該 source
+重試整個 init：`orbit init --yes --source <name> --url <url> --json`（或
+`--path`，並帶上原本的 `--ref`、`--workspace` 與 `--env`）。單純的
+`orbit init` 則照原樣重試。
 
 已轉換控制指令的穩定 `data.operation` 值：
 

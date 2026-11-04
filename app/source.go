@@ -167,7 +167,7 @@ environments from this source.`,
 			}
 			source, result, err := envsource.Refresh(registry, source, daemon.OrbitDir(), false, false)
 			if err != nil {
-				return sourceAddSyncError(source, err)
+				return firstSyncError(source, err, sourceAddCommand(source))
 			}
 			if err := registry.Add(source); err != nil {
 				_ = os.RemoveAll(envsource.SourceDir(daemon.OrbitDir(), source.Name))
@@ -444,28 +444,38 @@ func sourceSyncError(source envsource.Source, err error) error {
 	return fmt.Errorf("synchronize source %s: %w", source.Name, err)
 }
 
-// sourceAddSyncError recovers a failed first sync. The source was never
-// registered, so `orbit source sync` has nothing to retry; the recovery
-// replays the add instead.
-func sourceAddSyncError(source envsource.Source, err error) error {
+// firstSyncError recovers a failed first sync. The source was never
+// registered, so `orbit source sync` has nothing to retry; retry replays the
+// command that would have registered it instead.
+func firstSyncError(source envsource.Source, err error, retry string) error {
 	if source.Type != envsource.TypeGit {
 		return sourceSyncError(source, err)
 	}
 	return fmt.Errorf("synchronize source %s: %w", source.Name,
-		envRepoAccessError(err, sourceAddCommand(source), cli.WithJSONReplacementActions))
+		envRepoAccessError(err, retry, cli.WithJSONReplacementActions))
 }
 
-// sourceAddCommand rebuilds the add for a git source without URL credentials,
-// because the command is echoed into messages and recommended actions.
+// sourceAddCommand rebuilds the add for a git source.
 func sourceAddCommand(source envsource.Source) string {
-	args := []string{"orbit", "source", "add", shellquote.Quote(source.Name), "--url", shellquote.Quote(envsync.RedactURL(source.URL))}
+	return strings.Join(append([]string{"orbit", "source", "add", shellquote.Quote(source.Name)}, sourceFlags(source)...), " ")
+}
+
+// sourceFlags spells the flags that recreate source, without URL credentials
+// because the result is echoed into messages and recommended actions.
+func sourceFlags(source envsource.Source) []string {
+	var args []string
+	if source.Type == envsource.TypeLocal {
+		args = append(args, "--path", shellquote.Quote(source.Path))
+	} else {
+		args = append(args, "--url", shellquote.Quote(envsync.RedactURL(source.URL)))
+	}
 	if source.Ref != "" {
 		args = append(args, "--ref", shellquote.Quote(source.Ref))
 	}
 	if source.Workspace != "" {
 		args = append(args, "--workspace", shellquote.Quote(source.Workspace))
 	}
-	return strings.Join(args, " ")
+	return args
 }
 
 func applySourceWorkspace(configPath string) error {

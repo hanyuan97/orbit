@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -192,29 +193,35 @@ func TestInitJSONRequiresNonInteractiveMode(t *testing.T) {
 	}
 }
 
-func TestIncompleteInitJSONIsFailureWithRecoveryActions(t *testing.T) {
+func TestFailedFirstSyncRetriesInitWithTheSourceAndKeepsAuthSteps(t *testing.T) {
+	source := envsource.Source{Name: "team", Type: envsource.TypeGit, URL: "https://user:s3cret@github.com/example/private-env.git"}
+	result := initResult{Ready: false, retry: initSourceCommand(source, "")}
+	syncFailure := firstSyncError(source, &envsync.CloneError{URL: source.URL, Err: errors.New("exit status 128")}, result.retry)
+
 	var buf bytes.Buffer
-	result := initResult{Ready: false, Warnings: []string{"env sync failed"}}
-	syncFailure := envRepoSyncError(&envsync.CloneError{
-		URL: "https://github.com/example/private-env.git",
-		Err: errors.New("exit status 128"),
-	})
-	failure := initFailure(result, syncFailure)
-	if err := cli.WriteJSONFailure(&buf, "orbit init --yes --json", result, failure, initRecommendedActions(result)); err != nil {
+	if err := cli.WriteJSONFailure(&buf, "orbit init --yes --json", result, initFailureWithRecovery(result, syncFailure), nil); err != nil {
 		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "s3cret") {
+		t.Fatalf("credential leaked into JSON:\n%s", buf.String())
 	}
 	envelope := decodeEnvelope(t, buf.Bytes())
 	if envelope.OK || envelope.Error == nil || envelope.Error.Code != "env_repo_access" {
 		t.Fatalf("envelope = %+v", envelope)
 	}
-	commands := make(map[string]bool, len(envelope.RecommendedActions))
-	for _, action := range envelope.RecommendedActions {
-		commands[action.Command] = true
+	retry := "orbit init --yes --source team --url https://github.com/example/private-env.git --json"
+	if envelope.Error.NextCommand != retry {
+		t.Fatalf("next_command = %q, want %q", envelope.Error.NextCommand, retry)
 	}
-	for _, command := range []string{"gh auth login", "gh auth setup-git", "orbit init --yes --json"} {
-		if !commands[command] {
-			t.Fatalf("recommended_actions missing %q: %+v", command, envelope.RecommendedActions)
-		}
+	var commands []string
+	for _, action := range envelope.RecommendedActions {
+		commands = append(commands, action.Command)
+	}
+	if want := []string{retry, "gh auth login", "gh auth setup-git"}; !slices.Equal(commands, want) {
+		t.Fatalf("recommended_actions = %q, want %q", commands, want)
+	}
+	if !strings.Contains(envelope.Error.Message, "retry `"+strings.TrimSuffix(retry, " --json")+"`") {
+		t.Fatalf("message does not name the init retry: %q", envelope.Error.Message)
 	}
 }
 
