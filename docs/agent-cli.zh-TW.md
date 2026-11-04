@@ -316,7 +316,7 @@ orbit trace -f --json          # NDJSON 串流 trace-summary 更新
 
 Orbit 自己 health probe 的 trace 預設隱藏（除非出錯，見
 [tracing.zh-TW.md](tracing.zh-TW.md#health-probe-流量)）；`--include-health`
-會顯示它們。`-f` 模式下 `--search` 只比對 `rootService`、`rootName` 與
+會顯示它們。`data.hiddenHealthTraces` 是被隱藏的相符 trace 數。`-f` 模式下 `--search` 只比對 `rootService`、`rootName` 與
 `services`，因為 summary 不帶 span；root span 尚未抵達前發出的 summary 也還
 認不出是 health 流量。
 

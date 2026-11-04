@@ -130,23 +130,20 @@ func NewServer(app *engine.App, holder *config.Holder, stateFile *StateFile, set
 }
 
 // traceHealthRule derives the store's health-probe rule from the current
-// config: the probe's User-Agent, plus each resource's HTTP health_check.path
-// for services whose instrumentation does not record the user agent.
+// config: the probe's User-Agent, plus each service's HTTP health_check.path
+// for instrumentation that does not record the user agent. Only services get
+// OTEL_SERVICE_NAME set to their resource name, so containers have no key to
+// match. An empty path probes "/", which would hide real traffic; those probes
+// are recognised by User-Agent alone.
 func traceHealthRule(cfg *config.Config) tracing.HealthRule {
 	rule := tracing.HealthRule{UserAgent: health.ProbeUserAgent, Paths: map[string]string{}}
 	if cfg == nil {
 		return rule
 	}
-	add := func(name string, hc *config.HealthCheckConfig) {
-		if hc != nil && hc.Type == "http" && hc.Path != "" {
+	for name, svc := range cfg.Services {
+		if hc := svc.HealthCheck; hc != nil && hc.Type == "http" && hc.Path != "" {
 			rule.Paths[name] = hc.Path
 		}
-	}
-	for name, svc := range cfg.Services {
-		add(name, svc.HealthCheck)
-	}
-	for name, ctr := range cfg.Containers {
-		add(name, ctr.HealthCheck)
 	}
 	return rule
 }

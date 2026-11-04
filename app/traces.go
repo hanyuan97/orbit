@@ -121,7 +121,7 @@ func runTracesList(_ *cobra.Command, _ []string) error {
 	}
 
 	if cli.JSONOutput {
-		return cli.WriteJSONSuccess(os.Stdout, commandString(), map[string]any{"traces": traces}, nil)
+		return cli.WriteJSONSuccess(os.Stdout, commandString(), map[string]any{"traces": traces, "hiddenHealthTraces": hidden}, nil)
 	}
 
 	if len(traces) == 0 && hidden == 0 && traceFilter == (tracing.TraceFilter{}) {

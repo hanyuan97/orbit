@@ -460,6 +460,7 @@ orbit trace -f --json          # NDJSON stream of trace-summary updates
 
 Traces of Orbit's own health probes are hidden unless they errored (see
 [tracing.md](tracing.md#health-probe-traffic)); `--include-health` shows them.
+`data.hiddenHealthTraces` says how many matching traces were hidden.
 Under `-f`, `--search` sees only `rootService`, `rootName` and `services`,
 because summaries carry no spans, and a summary emitted before its root span
 arrives is not yet recognised as health traffic.
