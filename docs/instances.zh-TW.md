@@ -35,8 +35,9 @@ orbit instance list --json
 - `resource_states`：各 state 的 resource 數量，key 為 `orbit status` 回報的
   resource `state`，例如 `{"healthy": 2, "stopped": 10}`。Daemon 停止或沒有
   回應時會省略，因此欄位不存在代表未知，而非零。
-- `last_active_at`：該 instance 最近一次記錄 command 或 dashboard 操作的時間。
-  Instance 尚無 history 時會省略。
+- `last_active_at`：該 instance 最新一筆 history record 的時間，包含 command、
+  dashboard 操作，以及在 Orbit 之外重啟 container 這類 daemon event。Instance 尚無
+  history 時會省略。
 
 ## 隔離與 ports
 

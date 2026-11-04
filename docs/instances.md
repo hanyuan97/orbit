@@ -36,8 +36,9 @@ resources'. Each entry also reports:
   resource `state` that `orbit status` reports, such as
   `{"healthy": 2, "stopped": 10}`. It is omitted when the daemon is stopped or
   does not answer, so a missing field means unknown, not zero.
-- `last_active_at`: when the instance last recorded a command or dashboard
-  action. It is omitted when the instance has no history yet.
+- `last_active_at`: the time of the instance's newest history record: a
+  command, a dashboard action, or a daemon event such as a container restarted
+  outside Orbit. It is omitted when the instance has no history yet.
 
 ## Isolation and ports
 
