@@ -28,6 +28,7 @@ func (o *Orchestrator) startService(ctx context.Context, name string) error {
 	info.cancel = cancel
 	info.Generation++
 	gen := info.Generation
+	info.launched = false
 	info.ContainerID = ""
 	info.containerRunStartedAt = time.Time{}
 	if info.Kind == "container" && !info.ContainerStartedAt.IsZero() {
@@ -64,6 +65,8 @@ func (o *Orchestrator) startService(ctx context.Context, name string) error {
 			}
 			return
 		}
+
+		o.markLaunched(name, gen)
 
 		// Start health checking on the per-service ctx so a stop during
 		// startup cancels the health poll instead of leaking a goroutine.
@@ -209,6 +212,14 @@ func (o *Orchestrator) OnContainerObserved(name string, obs ContainerObservation
 		o.notifyDependents(name)
 	}
 	return restart
+}
+
+func (o *Orchestrator) markLaunched(name string, generation int) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if info, exists := o.services[name]; exists && info.Generation == generation {
+		info.launched = true
+	}
 }
 
 // RecordContainerStarted attributes the Docker runtime that a start or

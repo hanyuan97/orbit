@@ -62,7 +62,7 @@ func renderLines(
 			s.state,
 			fmtDur(now.Sub(s.firstSeen)),
 		)
-		if p := progressByName[name]; p != nil {
+		if p := progressByName[name]; p != nil && p.Attempts > 0 {
 			line += fmt.Sprintf("  health %d/%d", p.Attempts, p.MaxRetries)
 			if p.LastErr != "" {
 				line += "  last: " + p.LastErr

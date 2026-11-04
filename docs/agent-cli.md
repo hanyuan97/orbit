@@ -169,6 +169,29 @@ reports the same fields. Look for that entry in `failed_resources` rather than
 relying on `error.code` alone: a dependent resource can be reported first as
 `dependency_blocked`.
 
+A resource that stays `starting` reports where it stopped. `starting_phase`
+is `launching` (port check, `pre_start`, process exec or container start) or
+`probing` (waiting for readiness). A supervised host process carries its `pid`.
+Once a probe of an `http`, `tcp`, `exec`, or `healthcheck` check has started
+(a `log` check has no probes), `health_progress` carries `attempts`,
+`max_retries`, `last_err`, `recovering`, `probe_started_at` (present only while
+a probe is in flight), `last_probe_at` (when the latest probe returned), and
+`protocol` (`h2c` or the HTTP/1.x version, such as `HTTP/1.1`, that answered the
+last cleartext HTTP probe). It describes the latest run, so on a stopped
+resource it is history. While `starting`, read it together:
+
+- `probe_started_at` that keeps aging: the probe itself never returned.
+- No probe in flight and an empty `last_err`, with a `last_probe_at` that stops
+  advancing: the probe passed but delivering its result is stuck. Capture a
+  goroutine dump.
+- The same, with a `last_probe_at` that keeps advancing: the probe passed and
+  monitoring runs, but the `healthy` transition was dropped.
+- Neither timestamp while `probing`: no probe has started.
+
+To capture the daemon's goroutine stacks without stopping it, send `SIGUSR1`
+to the daemon pid (`data.daemon.pid` from `orbit inspect --json`). The dump is
+appended to `daemon.log`. This is unavailable on Windows.
+
 Destructive steps that need an explicit go-ahead use the stable
 `confirmation_required` error code. The refusal changes nothing; the first
 recommended action is the same command with `--yes`. Emit it only when the
