@@ -40,9 +40,8 @@ treats them as preferences: Orbit selects available ports when necessary,
 persists the result for stable restarts, injects the resolved ports into host
 services, and reports the actual endpoints through `up`, `status`, and
 `instance list`. A persisted port that something outside the instance now
-holds is replaced with a free one at the next daemon start, and an instance
-never takes the default runtime's dashboard port. An `ORBIT_DASHBOARD_PORT`
-set for the instance is a pin: if it is taken, the start fails instead.
+holds is replaced with a free one at the next daemon start. An instance never
+takes the default runtime's dashboard port (`ORBIT_DASHBOARD_PORT`, or 19800).
 
 Callers should consume those reported endpoints instead of assuming the
 declared port or coordinating `ORBIT_HOME`, `ORBIT_NAMESPACE`,

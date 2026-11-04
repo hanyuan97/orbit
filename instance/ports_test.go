@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/iml885203/orbit/config"
 	orbitport "github.com/iml885203/orbit/port"
@@ -169,7 +170,7 @@ func TestResolveDashboardPortIgnoresListenerOutsideIPv4Loopback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := ResolveDashboardPort(preferred, false, noDefaultDashboard)
+	got, err := ResolveDashboardPort(preferred, noDefaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +209,7 @@ func TestResolvePortsNeverHandsOutTheInstanceDashboardPort(t *testing.T) {
 	if _, err := Activate("test-dashboard"); err != nil {
 		t.Fatal(err)
 	}
-	dashboard, err := ResolveDashboardPort(availableTestPort(t), false, noDefaultDashboard)
+	dashboard, err := ResolveDashboardPort(availableTestPort(t), noDefaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +291,7 @@ func TestResolveDashboardPortAvoidsTheInstanceServicePorts(t *testing.T) {
 	service := availableTestPort(t)
 	writeTestPortAssignments(t, "test-dash", map[string]int{"api/http": service})
 
-	got, err := ResolveDashboardPort(service, false, noDefaultDashboard)
+	got, err := ResolveDashboardPort(service, noDefaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,14 +354,14 @@ func TestResolveDashboardPortMovesAStoredPortSomethingElseHolds(t *testing.T) {
 	held := holdTestPort(t)
 	writeTestPortAssignments(t, "test-dash-held", map[string]int{"dashboard": held})
 
-	got, err := ResolveDashboardPort(held, false, noDefaultDashboard)
+	got, err := ResolveDashboardPort(held, noDefaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got == held {
 		t.Fatalf("dashboard kept port %d another process holds", held)
 	}
-	again, err := ResolveDashboardPort(held, false, noDefaultDashboard)
+	again, err := ResolveDashboardPort(held, noDefaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -374,7 +375,7 @@ func TestResolveDashboardPortKeepsAFreeStoredPort(t *testing.T) {
 	stored := availableTestPort(t)
 	writeTestPortAssignments(t, "test-dash-free", map[string]int{"dashboard": stored})
 
-	got, err := ResolveDashboardPort(availableTestPort(t), false, noDefaultDashboard)
+	got, err := ResolveDashboardPort(availableTestPort(t), noDefaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -387,7 +388,7 @@ func TestResolveDashboardPortSkipsTheDefaultRuntimeDashboard(t *testing.T) {
 	activateTestInstance(t, "test-dash-default")
 	defaultDashboard := availableTestPort(t)
 
-	got, err := ResolveDashboardPort(defaultDashboard, false, defaultDashboard)
+	got, err := ResolveDashboardPort(defaultDashboard, defaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,26 +404,12 @@ func TestResolveDashboardPortMovesAStoredDefaultRuntimeDashboard(t *testing.T) {
 	defaultDashboard := availableTestPort(t)
 	writeTestPortAssignments(t, "test-dash-stored-default", map[string]int{"dashboard": defaultDashboard})
 
-	got, err := ResolveDashboardPort(defaultDashboard, false, defaultDashboard)
+	got, err := ResolveDashboardPort(defaultDashboard, defaultDashboard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got == defaultDashboard {
 		t.Fatalf("dashboard kept the default runtime's port %d", got)
-	}
-}
-
-func TestResolveDashboardPortHonoursAPinOverTheStoredPort(t *testing.T) {
-	activateTestInstance(t, "test-dash-pin")
-	writeTestPortAssignments(t, "test-dash-pin", map[string]int{"dashboard": availableTestPort(t)})
-	pin := holdTestPort(t)
-
-	got, err := ResolveDashboardPort(pin, true, noDefaultDashboard)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != pin {
-		t.Fatalf("dashboard port = %d, want the pinned %d even while it is taken", got, pin)
 	}
 }
 
@@ -538,5 +525,31 @@ func TestResolvePortsSkipsContainerQueryWhenStoredPortsAreFree(t *testing.T) {
 	}}
 	if err := ResolvePorts(cfg, noDefaultDashboard, survivors); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestResolveDashboardPortMovesAStoredPortAnotherInstanceRecorded(t *testing.T) {
+	activateTestInstance(t, "test-dash-peer")
+	shared := availableTestPort(t)
+	writeTestPortAssignments(t, "test-dash-peer", map[string]int{"dashboard": shared})
+	peer := portAssignments{UpdatedAt: time.Now().UTC(), Ports: map[string]int{"dashboard": shared}}
+	peerHome := filepath.Join(BaseHome(), "instances", "peer")
+	if err := os.MkdirAll(peerHome, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(peerHome, "ports.json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveDashboardPort(shared, noDefaultDashboard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == shared {
+		t.Fatalf("dashboard kept port %d another live instance recorded", shared)
 	}
 }

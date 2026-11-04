@@ -479,7 +479,7 @@ func instanceSurvivors(namespace string, prevState *daemonsrv.DaemonState, prevS
 		ContainerPorts: func() (map[int]bool, error) {
 			mgr, err := container.NewManager(namespace)
 			if err != nil {
-				slog.Warn("listing surviving containers", "component", "daemon", "err", err)
+				slog.Warn("connecting to Docker for surviving containers", "component", "daemon", "err", err)
 				return nil, err
 			}
 			defer func() { _ = mgr.Close() }()

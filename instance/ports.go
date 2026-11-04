@@ -125,21 +125,16 @@ func (s Survivors) holds() func(portRequest, int) bool {
 	}
 }
 
-// ResolveDashboardPort returns the instance's dashboard port. A pinned
-// preferred port is the user's choice and is recorded as is; otherwise the
-// stored port is kept while it is free, and a first or displaced assignment
-// avoids defaultDashboardPort, the default runtime's dashboard.
-func ResolveDashboardPort(preferred int, pinned bool, defaultDashboardPort int) (int, error) {
+// ResolveDashboardPort returns the instance's dashboard port. The stored port
+// is kept while it is free; a first or displaced assignment starts at
+// preferred and avoids defaultDashboardPort, the default runtime's dashboard.
+func ResolveDashboardPort(preferred int, defaultDashboardPort int) (int, error) {
 	name := CurrentName()
 	if name == "" {
 		return preferred, nil
 	}
 	assigned := preferred
 	err := updatePortAssignments(name, func(assignments *portAssignments, reserved map[int]bool) error {
-		if pinned {
-			assignments.Ports["dashboard"] = preferred
-			return nil
-		}
 		reserved[defaultDashboardPort] = true
 		// The only caller starts a daemon after EnsureDaemon found none alive,
 		// so a taken port is never held by this instance's own dashboard.

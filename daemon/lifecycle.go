@@ -359,7 +359,9 @@ func StartDaemonWithContext(configPath string, features []string, contextKind st
 	preferredDashboardPort, pinnedDashboardPort := dashboardPortFromEnv()
 	if instance.CurrentName() != "" {
 		var err error
-		preferredDashboardPort, err = instance.ResolveDashboardPort(preferredDashboardPort, pinnedDashboardPort, DefaultDashboardPort)
+		// ORBIT_DASHBOARD_PORT is shared with the default runtime, so for an
+		// instance it names the port to stay off, not a pin.
+		preferredDashboardPort, err = instance.ResolveDashboardPort(preferredDashboardPort, configuredDashboardPortOrDefault())
 		if err != nil {
 			return 0, fmt.Errorf("resolving instance dashboard port: %w", err)
 		}
