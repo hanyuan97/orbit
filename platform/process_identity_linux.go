@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 )
 
 // ProcessArgs returns the live argv of pid as the kernel reports it, which
@@ -16,7 +15,7 @@ func ProcessArgs(pid int) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading argv of pid %d: %w", pid, err)
 	}
-	return strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00"), nil
+	return parseProcCmdline(raw), nil
 }
 
 // ProcessWorkingDir returns the current working directory of pid.

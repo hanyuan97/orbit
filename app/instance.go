@@ -199,12 +199,13 @@ func retireRecordedProcesses() ([]skippedProcess, error) {
 			Name: name, PID: record.PID, PGID: record.PGID, Command: record.Command, Dir: record.Dir,
 		}, config.DefaultShutdownTimeout)
 		var mismatch *process.OwnershipMismatchError
-		if errors.As(err, &mismatch) {
+		switch {
+		case errors.As(err, &mismatch):
 			skipped = append(skipped, skippedProcess{Service: name, PID: record.PID, Reason: mismatch.Reason})
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("stopping recorded service process: %w", err)
+		case err != nil:
+			// One stuck group must not keep the instance's Docker resources
+			// and home around; report it alongside the unproven ones.
+			skipped = append(skipped, skippedProcess{Service: name, PID: record.PID, Reason: err.Error()})
 		}
 	}
 	return skipped, nil

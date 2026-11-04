@@ -53,6 +53,10 @@ func recordMismatch(rec RecordedProcess) string {
 	if rec.PGID <= 0 || rec.Command == "" || rec.Dir == "" {
 		return "record lacks the pgid, command, or directory needed to prove ownership"
 	}
+	// Orbit starts every service as its own process group leader.
+	if rec.PGID != rec.PID {
+		return fmt.Sprintf("recorded pid %d does not lead its group %d", rec.PID, rec.PGID)
+	}
 	if pgid, err := platform.GetProcessGroup(rec.PID); err != nil || pgid != rec.PGID {
 		return fmt.Sprintf("process group is not the recorded %d", rec.PGID)
 	}

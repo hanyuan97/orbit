@@ -3,9 +3,7 @@
 package platform
 
 import (
-	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -22,34 +20,6 @@ func ProcessArgs(pid int) ([]string, error) {
 		return nil, fmt.Errorf("reading argv of pid %d: %w", pid, err)
 	}
 	return parseProcArgs2(raw)
-}
-
-// parseProcArgs2 decodes kern.procargs2: a native-endian int32 argc, the
-// exec path, NUL padding, then argc NUL-terminated arguments.
-func parseProcArgs2(raw []byte) ([]string, error) {
-	if len(raw) < 4 {
-		return nil, fmt.Errorf("procargs2 too short")
-	}
-	argc := int(binary.NativeEndian.Uint32(raw[:4]))
-	rest := raw[4:]
-	end := bytes.IndexByte(rest, 0)
-	if end < 0 {
-		return nil, fmt.Errorf("procargs2 missing exec path")
-	}
-	rest = bytes.TrimLeft(rest[end:], "\x00")
-	args := make([]string, 0, argc)
-	for len(args) < argc && len(rest) > 0 {
-		end = bytes.IndexByte(rest, 0)
-		if end < 0 {
-			end = len(rest)
-		}
-		args = append(args, string(rest[:end]))
-		if end == len(rest) {
-			break
-		}
-		rest = rest[end+1:]
-	}
-	return args, nil
 }
 
 // ProcessWorkingDir returns the current working directory of pid.

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestE2E_RelativeFileBindRecreatesFromConfigDirectory(t *testing.T) {
@@ -405,7 +406,9 @@ func assertCleaningStoppedInstanceNeedsNoConfig(t *testing.T, env *e2eEnv, peer 
 	if err := unrelated.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = unrelated.Process.Kill(); _ = unrelated.Wait() })
+	unrelatedExited := make(chan struct{})
+	go func() { _ = unrelated.Wait(); close(unrelatedExited) }()
+	t.Cleanup(func() { _ = unrelated.Process.Kill(); <-unrelatedExited })
 	instanceHome := filepath.Join(env.home, "instances", peer.Name)
 	recordProcessInState(t, filepath.Join(instanceHome, "state.json"), "reused", map[string]any{
 		"pid": unrelated.Process.Pid, "pgid": unrelated.Process.Pid, "command": "python3 server.py", "dir": env.home,
@@ -434,8 +437,10 @@ func assertCleaningStoppedInstanceNeedsNoConfig(t *testing.T, env *e2eEnv, peer 
 	if !envelope.OK || len(data.Skipped) != 1 || data.Skipped[0].PID != unrelated.Process.Pid {
 		t.Fatalf("clean without config did not report the unproven pid: %s", output)
 	}
-	if err := unrelated.Process.Signal(syscall.Signal(0)); err != nil {
-		t.Fatalf("clean killed an unrelated process recorded under a reused pid: %v", err)
+	select {
+	case <-unrelatedExited:
+		t.Fatal("clean killed an unrelated process recorded under a reused pid")
+	case <-time.After(500 * time.Millisecond):
 	}
 	if left := dockerOutput(t, "volume", "ls", "--quiet", "--filter", "label=orbit.namespace="+peer.Namespace); left != "" {
 		t.Fatalf("labelled volumes survived clean without config:\n%s", left)
