@@ -30,6 +30,7 @@ The container started but the health check never succeeded.
 - **Check logs**: `orbit logs <resource>`. Most startup failures surface there.
 - **Heavy first-time initialization**: containers such as a database restoring many schemas can take several minutes on an empty volume. Follow the logs before treating the wait as a hang.
 - **Rosetta emulation on Apple Silicon**: any container with `platform: linux/amd64` runs under Rosetta — expect ~2× startup time. Check `docker inspect --format '{{.Platform}}'`.
+- **Still `starting` past the health budget**: `orbit status --json` shows `starting_phase` and `health_progress` for the resource; [agent-cli.md](agent-cli.md) explains how to read them. Before restarting anything, capture the daemon's goroutine stacks with `kill -USR1 <daemon pid>` (macOS/Linux); they are appended to `~/.orbit/daemon.log` and the daemon keeps running.
 
 ### `port already in use`
 

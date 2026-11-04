@@ -13,6 +13,7 @@ import (
 
 	"github.com/iml885203/orbit/config"
 	"github.com/iml885203/orbit/internal/engine"
+	"github.com/iml885203/orbit/internal/health"
 	"github.com/iml885203/orbit/logging"
 )
 
@@ -76,15 +77,7 @@ func (s *Server) computeStatuses(cfg *config.Config) []ResourceStatus {
 			mode = s.settings.GetServiceMode(svc.Name)
 		}
 		image := getContainerImage(cfg, svc.Name, svc.Kind)
-		var hp *HealthProgressInfo
-		if p := s.app.HealthChecker.Progress(svc.Name); p.Configured && p.Attempts > 0 {
-			hp = &HealthProgressInfo{
-				Attempts:   p.Attempts,
-				MaxRetries: p.MaxRetries,
-				LastErr:    p.LastErr,
-				Recovering: p.Recovering,
-			}
-		}
+		hp := healthProgressInfo(s.app.HealthChecker.Progress(svc.Name))
 		pendingDependencies := make([]string, 0, len(svc.PendingDeps))
 		for dependency := range svc.PendingDeps {
 			pendingDependencies = append(pendingDependencies, dependency)
@@ -95,6 +88,8 @@ func (s *Server) computeStatuses(cfg *config.Config) []ResourceStatus {
 			Kind:                 ResourceKind(svc.Kind),
 			Role:                 getResourceRole(cfg, svc.Name, svc.Kind),
 			State:                svc.State.String(),
+			StartingPhase:        svc.StartingPhase(),
+			PID:                  s.managedProcessPID(svc),
 			PendingDependencies:  pendingDependencies,
 			StateReason:          svc.StateReason,
 			FailureKind:          string(svc.FailureKind),
@@ -119,6 +114,38 @@ func (s *Server) computeStatuses(cfg *config.Config) []ResourceStatus {
 	dependencies := engine.NewDepGraph(cfg, s.settings.GetDetachedEdges(s.currentEnvName()))
 	applyDependencyImpact(dependencies, out)
 	return out
+}
+
+// healthProgressInfo exposes progress once a probe has started, so a first
+// probe that never returns is already visible as in flight.
+func healthProgressInfo(p health.Progress) *HealthProgressInfo {
+	if !p.Configured || (p.Attempts == 0 && p.ProbeStartedAt.IsZero()) {
+		return nil
+	}
+	return &HealthProgressInfo{
+		Attempts:       p.Attempts,
+		MaxRetries:     p.MaxRetries,
+		LastErr:        p.LastErr,
+		Recovering:     p.Recovering,
+		ProbeStartedAt: optionalTime(p.ProbeStartedAt),
+		LastProbeAt:    optionalTime(p.LastProbeAt),
+		Protocol:       p.Protocol,
+	}
+}
+
+func optionalTime(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
+}
+
+func (s *Server) managedProcessPID(svc *engine.ServiceInfo) int {
+	if ResourceKind(svc.Kind) != ResourceKindService {
+		return 0
+	}
+	pid, _, _ := s.app.ProcessMgr.GetProcessInfo(svc.Name)
+	return pid
 }
 
 // applyDependencyImpact overlays availability on top of lifecycle truth.

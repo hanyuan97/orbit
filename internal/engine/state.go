@@ -220,8 +220,13 @@ type ServiceInfo struct {
 	// removal may still finish from a startup failure where no container
 	// ever existed. The poller may reconcile only the former to stopped.
 	AwaitingContainerRemoval bool
-	StartedAt                time.Time // when the service entered Starting state
-	HealthyAt                time.Time // when the service first became Healthy
+	// launched records that the current generation's start hook returned,
+	// so a Starting service is waiting on readiness rather than still
+	// launching. Reset on every start. Mutation requires the owning
+	// Orchestrator's mu.
+	launched  bool
+	StartedAt time.Time // when the service entered Starting state
+	HealthyAt time.Time // when the service first became Healthy
 
 	// ctx is the per-service lifecycle context. It is created when the
 	// service transitions into Starting and cancelled by StopService/
@@ -242,6 +247,25 @@ func (i *ServiceInfo) cancelLifecycle() {
 	}
 	i.cancel()
 	i.cancel = nil
+}
+
+// Starting phases split StateStarting into the launch (port check,
+// pre_start, process exec or container start) and the readiness wait after it.
+const (
+	StartingPhaseLaunching = "launching"
+	StartingPhaseProbing   = "probing"
+)
+
+// StartingPhase reports which part of a start the service is in; empty
+// outside StateStarting.
+func (i *ServiceInfo) StartingPhase() string {
+	if i.State != StateStarting {
+		return ""
+	}
+	if i.launched {
+		return StartingPhaseProbing
+	}
+	return StartingPhaseLaunching
 }
 
 // Recovery probing after the startup budget ran out is still waiting for

@@ -3,6 +3,7 @@ package health
 import (
 	"fmt"
 	"sync"
+	"time"
 )
 
 // Progress carries the current retry state of a service's health check.
@@ -18,6 +19,21 @@ type Progress struct {
 	// LastErr keeps updating. Consumers (CLI waits, dashboard) treat a
 	// degraded-but-recovering service as "still trying", not terminal.
 	Recovering bool
+	// ProbeStartedAt is set while a probe is in flight and zero between
+	// probes, so a probe that never returns stays visible as an old value.
+	ProbeStartedAt time.Time
+	// LastProbeAt is when the most recent probe returned. It is recorded
+	// before the probe's result is delivered, so a recent value with no
+	// probe in flight on a service still starting points past the probe.
+	LastProbeAt time.Time
+	// Protocol is the cleartext HTTP protocol that answered the last probe
+	// ("h2c" or the HTTP/1.x version); empty until a cleartext http probe
+	// gets a response.
+	Protocol string
+	// probeToken identifies the probe that set ProbeStartedAt, so a probe
+	// that outlives its generation cannot clear or overwrite its
+	// successor's timing.
+	probeToken uint64
 	// recoveringOwner is the service generation that set Recovering. Clears
 	// are owner-scoped so a cancelled loop from a previous start can't drop
 	// the flag its successor just raised.
@@ -27,8 +43,9 @@ type Progress struct {
 // progressTracker is embedded in Checker. Kept in a separate file so the
 // retry tracking concern is isolated from the probe-strategy code.
 type progressTracker struct {
-	mu sync.RWMutex
-	m  map[string]Progress
+	mu         sync.RWMutex
+	m          map[string]Progress
+	probeCount uint64
 }
 
 func newProgressTracker() *progressTracker {
@@ -41,16 +58,50 @@ func (t *progressTracker) get(name string) Progress {
 	return t.m[name]
 }
 
+// record stores a probe verdict, ending recovery. Probe timing and protocol
+// describe the probes rather than the verdict, so they carry over.
 func (t *progressTracker) record(name string, configured bool, attempts, maxRetries int, err error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	prev := t.m[name]
 	p := Progress{
-		Configured: configured,
-		Attempts:   attempts,
-		MaxRetries: maxRetries,
+		Configured:     configured,
+		Attempts:       attempts,
+		MaxRetries:     maxRetries,
+		ProbeStartedAt: prev.ProbeStartedAt,
+		LastProbeAt:    prev.LastProbeAt,
+		Protocol:       prev.Protocol,
+		probeToken:     prev.probeToken,
 	}
 	if err != nil {
 		p.LastErr = err.Error()
+	}
+	t.m[name] = p
+}
+
+func (t *progressTracker) beginProbe(name string, at time.Time) (token uint64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.probeCount++
+	p := t.m[name]
+	p.Configured = true
+	p.ProbeStartedAt = at
+	p.probeToken = t.probeCount
+	t.m[name] = p
+	return t.probeCount
+}
+
+func (t *progressTracker) finishProbe(name string, token uint64, at time.Time, protocol string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	p, ok := t.m[name]
+	if !ok || p.probeToken != token {
+		return
+	}
+	p.ProbeStartedAt = time.Time{}
+	p.LastProbeAt = at
+	if protocol != "" {
+		p.Protocol = protocol
 	}
 	t.m[name] = p
 }
@@ -97,6 +148,16 @@ func (t *progressTracker) reset(name string) {
 // as "no progress to show."
 func (c *Checker) Progress(name string) Progress {
 	return c.progress.get(name)
+}
+
+// trackProbe runs one probe of a startup, recovery, or monitoring loop with
+// its in-flight window and completion time recorded, so status can show a
+// probe that never returns.
+func (c *Checker) trackProbe(name string, probe func() Result) Result {
+	token := c.progress.beginProbe(name, time.Now())
+	result := probe()
+	c.progress.finishProbe(name, token, time.Now(), result.Protocol)
+	return result
 }
 
 func (c *Checker) recordProgress(name string, configured bool, attempts, maxRetries int, err error) {

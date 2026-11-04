@@ -510,6 +510,8 @@ func runDaemon(_ *cobra.Command, _ []string) error {
 	log.SetOutput(logFile)
 	logging.SetupDefault(logFile, "ORBIT_LOG_LEVEL")
 	defer func() { _ = logFile.Close() }()
+	stopGoroutineDumps := watchGoroutineDumpSignal(logFile)
+	defer stopGoroutineDumps()
 
 	if err := daemon.WritePID(); err != nil {
 		return fmt.Errorf("writing PID file: %w", err)
