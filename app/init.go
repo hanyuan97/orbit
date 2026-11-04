@@ -112,7 +112,8 @@ For non-interactive setup (CI, scripts):
   orbit init --yes                                         # accept all defaults
   orbit init --yes --source team --url <url>               # add a named Git source
   orbit init --yes --source team --url <url> --ref <ref>   # pin a branch, tag, or commit
-  orbit init --yes --source local --path <dir> --env dev   # use a local source`,
+  orbit init --yes --source local --path <dir> --env dev   # use a local source
+  orbit init --yes --source team --env dev                 # re-sync a registered source`,
 		RunE: runInit,
 	}
 	cmd.Flags().BoolVarP(&initYes, "yes", "y", false, "accept defaults without prompting")
@@ -173,11 +174,25 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	var configuredFirst *envsource.Source
-	if initSource == "" && initEnvRepo == "" && initPath == "" && initEnvRef == "" {
+	// A registered source keeps its location: init must never swap it for
+	// the demo just because no location flag was given.
+	var configured *envsource.Source
+	switch {
+	case initSource == "" && initEnvRepo == "" && initPath == "" && initEnvRef == "":
 		if existing, firstErr := configuredRegistry.First(); firstErr == nil {
-			configuredFirst = &existing
+			configured = &existing
 		}
+	case initSource != "" && initEnvRepo == "" && initPath == "":
+		existing, getErr := configuredRegistry.Get(initSource)
+		if getErr == nil {
+			configured = &existing
+		} else if !errors.Is(getErr, envsource.ErrNotFound) {
+			return getErr
+		}
+	}
+	if configured != nil && initEnvRef != "" && configured.Type != envsource.TypeGit {
+		return cli.NewInvalidArgumentError(fmt.Sprintf(
+			"--ref is valid only for a Git source; source %q is %s", configured.Name, configured.Type))
 	}
 
 	currentURL := settings.Get(settingKeyEnvRepoURL)
@@ -192,7 +207,7 @@ func runInit(cmd *cobra.Command, _ []string) error {
 	case initEnvRepo != "":
 		repoURL = initEnvRepo
 		explicit = true
-	case repoURL == "" && !initYes:
+	case configured == nil && repoURL == "" && !initYes:
 		if input := prompt(fmt.Sprintf("  Git URL [%s]: ", repoURL)); input != "" {
 			repoURL = input
 			repoRef = initEnvRef
@@ -203,31 +218,19 @@ func runInit(cmd *cobra.Command, _ []string) error {
 		repoRef = initEnvRef
 		explicit = true
 	}
-	if configuredFirst != nil {
-		repoURL = configuredFirst.URL
-		repoRef = configuredFirst.Ref
-		explicit = true
-	}
-	defaultQuickstart := !explicit &&
-		currentURL == "" &&
-		currentRef == "" &&
-		distribution.DefaultEnv != "" &&
-		repoURL == distribution.EnvRepoURL &&
-		repoRef == distribution.EnvRepoRef
-	if defaultQuickstart {
-		output.boldln("Step 1: Quickstart")
-	} else {
-		output.boldln("Step 1: Environment source")
-	}
 
 	sourceName := initSource
 	if sourceName == "" {
 		sourceName = "default"
 	}
 	source := envsource.Source{Name: sourceName, Type: envsource.TypeGit, URL: repoURL, Ref: repoRef}
-	if configuredFirst != nil {
-		source = *configuredFirst
+	if configured != nil {
+		source = *configured
 		sourceName = source.Name
+		if initEnvRef != "" {
+			source.Ref = initEnvRef
+		}
+		explicit = true
 	}
 	if initPath != "" {
 		normalized, err := envsource.ValidateLocalSource(initPath)
@@ -245,6 +248,18 @@ func runInit(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 		source.Workspace = normalized
+	}
+	defaultQuickstart := !explicit &&
+		currentURL == "" &&
+		currentRef == "" &&
+		distribution.DefaultEnv != "" &&
+		source.Type == envsource.TypeGit &&
+		source.URL == distribution.EnvRepoURL &&
+		source.Ref == distribution.EnvRepoRef
+	if defaultQuickstart {
+		output.boldln("Step 1: Quickstart")
+	} else {
+		output.boldln("Step 1: Environment source")
 	}
 	envsDir := envsource.EnvsDir(daemon.OrbitDir(), sourceName)
 	if source.Location() == "" && len(sourceEnvironmentFiles(envsDestDir())) > 0 {

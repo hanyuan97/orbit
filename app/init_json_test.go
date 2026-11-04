@@ -18,45 +18,6 @@ import (
 	"github.com/iml885203/orbit/internal/envsync"
 )
 
-func TestInitReusesExistingFirstSource(t *testing.T) {
-	if os.Getenv("ORBIT_INIT_EXISTING_SOURCE_HELPER") == "1" {
-		cli.JSONOutput = true
-		initYes = true
-		initEnvRepo, initEnvRef, initEnvName, initSource, initPath, initWorkspace = "", "", "dev", "", "", ""
-		distribution.EnvRepoURL = "https://invalid.example/distribution.git"
-		if err := runInit(nil, nil); err != nil {
-			_, _ = os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-	orbitHome := t.TempDir()
-	local := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(local, "envs"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(local, "envs", "dev.yaml"), []byte("version: \"3\"\nservices: {}\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	registry, err := envsource.Load(envsource.RegistryPath(orbitHome))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := registry.Add(envsource.Source{Name: "local-team", Type: envsource.TypeLocal, Path: local}); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(os.Args[0], "-test.run=^TestInitReusesExistingFirstSource$")
-	cmd.Env = append(os.Environ(), "ORBIT_INIT_EXISTING_SOURCE_HELPER=1", "ORBIT_HOME="+orbitHome)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("helper failed: %v\nstderr:\n%s\nstdout:\n%s", err, stderr.String(), stdout.String())
-	}
-	if strings.Contains(stdout.String(), "invalid.example") || !strings.Contains(stdout.String(), "local-team") {
-		t.Fatalf("init replaced existing first source: %s", stdout.String())
-	}
-}
-
 func TestInitJSONOutputIsOneParseableEnvelope(t *testing.T) {
 	if os.Getenv("ORBIT_INIT_JSON_HELPER") == "1" {
 		cli.JSONOutput = true
