@@ -25,9 +25,13 @@ coding agent in a Herdr app terminal.
 
 ![The Orbit window in the Herdr app](./assets/integrations/herdr-app-orbit-panel.png)
 
-Install: Herdr app mods are added by your agent rather than by a package manager.
-Ask the agent running in the Herdr app to add the mod from
-`https://github.com/iml885203/orbit/tree/main/integrations/herdr-app`; it reads the
-files, copies `mods/orbit/` into `~/.config/herdr-app/mods/` and merges `cmd-o`
-from `keys.json`. Needs Orbit 0.16.10+ for SQL status. How it is built is in
+Install: paste this into the agent running in the Herdr app.
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/iml885203/orbit--integrations--herdr-app
+```
+
+The agent reads every file first, copies `mods/orbit/` into
+`~/.config/herdr-app/mods/` and merges `cmd-o` from `keys.json`; `cmd-o` then
+opens the window. Needs Orbit 0.16.10+ for SQL status. How it is built is in
 [RECIPE.md](https://github.com/iml885203/orbit/blob/main/integrations/herdr-app/RECIPE.md).

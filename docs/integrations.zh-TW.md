@@ -24,8 +24,12 @@ logs 與 traces 可以交給 Herdr app terminal 裡的 coding agent。
 
 ![Herdr app 中的 Orbit 視窗](./assets/integrations/herdr-app-orbit-panel.png)
 
-安裝：Herdr app 的 mod 由 agent 加入，而不是透過套件管理。請 Herdr app 裡的
-agent 從 `https://github.com/iml885203/orbit/tree/main/integrations/herdr-app`
-加入這個 mod；它會讀過檔案、把 `mods/orbit/` 複製到
-`~/.config/herdr-app/mods/`，並合併 `keys.json` 的 `cmd-o`。SQL 狀態需要
+安裝：把這段貼給 Herdr app 裡的 agent。
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/iml885203/orbit--integrations--herdr-app
+```
+
+agent 會先讀過每個檔案，把 `mods/orbit/` 複製到 `~/.config/herdr-app/mods/`，
+並合併 `keys.json` 的 `cmd-o`；之後按 `cmd-o` 就能開啟視窗。SQL 狀態需要
 Orbit 0.16.10+。建置方式見 [RECIPE.md](https://github.com/iml885203/orbit/blob/main/integrations/herdr-app/RECIPE.md)。
