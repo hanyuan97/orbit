@@ -68,3 +68,18 @@ func TestRecommendedActionsLeadWithTheSameCommandTheEnvelopeReports(t *testing.T
 		t.Fatalf("actions[0] = %q; diverges from the envelope's recommended_actions[0]", actions[0].Command)
 	}
 }
+
+// An error that replaces its classified recovery has already decided the
+// classified next command is wrong, so a person must not be told it either.
+func TestHumanGuidanceFollowsReplacedRecovery(t *testing.T) {
+	err := WithJSONReplacementActions(
+		NewEnvRepoAccessError("cannot access environment repo"),
+		[]JSONAction{{Command: "orbit source add team --url https://example.com/env.git --json", Reason: "Retry."}},
+	)
+
+	_, _, next := HumanGuidance(err)
+
+	if next != "orbit source add team --url https://example.com/env.git" {
+		t.Fatalf("next command = %q; diverges from the envelope's next_command", next)
+	}
+}

@@ -102,11 +102,34 @@ func gitIn(dir string, args ...string) ([]byte, error) {
 
 func displayURL(raw string) string {
 	parsed, err := url.Parse(raw)
-	if err != nil || parsed.User == nil {
+	if err != nil {
+		return stripUnparsedUserinfo(raw)
+	}
+	if parsed.User == nil {
 		return raw
 	}
 	parsed.User = nil
 	return parsed.String()
+}
+
+// stripUnparsedUserinfo still hides credentials when url.Parse rejects the
+// URL, for example a password with a bad percent-escape. SCP-style remotes
+// (git@host:path) have no "://" and carry no secret, so they pass through.
+func stripUnparsedUserinfo(raw string) string {
+	scheme, rest, found := strings.Cut(raw, "://")
+	if !found {
+		return raw
+	}
+	authority, path, _ := strings.Cut(rest, "/")
+	at := strings.LastIndex(authority, "@")
+	if at < 0 {
+		return raw
+	}
+	redacted := scheme + "://" + authority[at+1:]
+	if len(rest) > len(authority) {
+		redacted += "/" + path
+	}
+	return redacted
 }
 
 func RedactURL(raw string) string {

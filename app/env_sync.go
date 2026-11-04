@@ -85,21 +85,29 @@ func runEnvSync(cmd *cobra.Command, _ []string) error {
 }
 
 func envRepoSyncError(err error) error {
+	return envRepoAccessError(err, "orbit source sync", cli.WithJSONActions)
+}
+
+// envRepoAccessError explains why an environment repository could not be read
+// and names retry as the step to run once access is restored. attach decides
+// whether its actions add to or replace the classified env_repo_access default.
+func envRepoAccessError(err error, retry string, attach func(error, []cli.JSONAction) error) error {
 	var cloneErr *envsync.CloneError
 	if !errors.As(err, &cloneErr) {
 		return fmt.Errorf("sync: %w", err)
 	}
+	retryAction := cli.JSONAction{
+		Command:     retry + " --json",
+		Reason:      "Retry after restoring Git access to the environment repository.",
+		Destructive: false,
+	}
 	if errors.Is(cloneErr.Err, exec.ErrNotFound) {
-		return cli.WithJSONActions(
+		return attach(
 			cli.NewEnvRepoAccessError(
 				"Git is required only to sync shared environments, but git was not found on PATH.\n"+
-					"Install Git from https://git-scm.com/downloads, then retry 'orbit source sync'.",
+					"Install Git from https://git-scm.com/downloads, then retry `"+retry+"`.",
 			),
-			[]cli.JSONAction{{
-				Command:     "orbit source sync --json",
-				Reason:      "Retry the environment sync after installing Git.",
-				Destructive: false,
-			}},
+			[]cli.JSONAction{retryAction},
 		)
 	}
 	message := fmt.Sprintf("cannot access environment repo %s: %v", cloneErr.DisplayURL(), cloneErr.Err)
@@ -112,16 +120,15 @@ func envRepoSyncError(err error) error {
 		return cli.NewEnvRepoUnavailableError(message)
 	}
 	if cloneErr.IsGitHub() {
-		message += "\nFor a private GitHub repo, run 'gh auth login' and 'gh auth setup-git', then retry 'orbit source sync'."
-		return cli.WithJSONActions(cli.NewEnvRepoAccessError(message), []cli.JSONAction{
+		message += "\nFor a private GitHub repo, run 'gh auth login' and 'gh auth setup-git', then retry `" + retry + "`."
+		return attach(cli.NewEnvRepoAccessError(message), []cli.JSONAction{
+			retryAction,
 			{Command: "gh auth login", Reason: "Authenticate GitHub CLI for private repository access.", Destructive: false},
 			{Command: "gh auth setup-git", Reason: "Configure Git to use the authenticated GitHub CLI credentials.", Destructive: false},
-			{Command: "orbit source sync --json", Reason: "Retry the environment source sync after restoring Git access.", Destructive: false},
 		})
-	} else {
-		message += "\nVerify the repository URL and Git access, then retry 'orbit source sync'."
 	}
-	return cli.NewEnvRepoAccessError(message)
+	message += "\nVerify the repository URL and Git access, then retry `" + retry + "`."
+	return attach(cli.NewEnvRepoAccessError(message), []cli.JSONAction{retryAction})
 }
 
 func inspectEnvironmentApply() (environmentApplyResult, error) {

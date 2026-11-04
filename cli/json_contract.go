@@ -72,14 +72,10 @@ func WriteJSONError(w io.Writer, command string, err error) error {
 // failure so callers do not have to choose between useful evidence and a
 // truthful exit result.
 func WriteJSONFailure(w io.Writer, command string, data any, err error, actions []JSONAction) error {
-	classified := classify(err)
+	classified := classifyRecovery(err)
 	var replacement interface{ CLIJSONReplacementActions() []JSONAction }
 	if errors.As(err, &replacement) {
 		actions = replacement.CLIJSONReplacementActions()
-		classified.NextCommand = ""
-		if len(actions) > 0 {
-			classified.NextCommand = actions[0].Command
-		}
 	} else {
 		actions = MergeActions(recommendedActionsForError(classified), actions)
 		var additive interface{ CLIJSONActions() []JSONAction }
@@ -95,6 +91,20 @@ func WriteJSONFailure(w io.Writer, command string, data any, err error, actions 
 		Error:              &classified,
 		RecommendedActions: actions,
 	})
+}
+
+// classifyRecovery classifies err and, when the error replaces the classified
+// recovery, names its own first action as the next command instead.
+func classifyRecovery(err error) JSONError {
+	classified := classify(err)
+	var replacement interface{ CLIJSONReplacementActions() []JSONAction }
+	if errors.As(err, &replacement) {
+		classified.NextCommand = ""
+		if actions := replacement.CLIJSONReplacementActions(); len(actions) > 0 {
+			classified.NextCommand = actions[0].Command
+		}
+	}
+	return classified
 }
 
 // StartCommand starts the config this invocation used. The app sets it once

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/iml885203/orbit/cli"
 	"github.com/iml885203/orbit/daemon"
 	"github.com/iml885203/orbit/internal/envsource"
+	"github.com/iml885203/orbit/internal/envsync"
 )
 
 func TestSourceHelpTeachesTheSmallCommandSet(t *testing.T) {
@@ -323,5 +325,68 @@ func TestLegacyEnvSyncDoesNotSilentlyDropEmptyOrSyncModifierFlags(t *testing.T) 
 		if err := command.Execute(); err == nil {
 			t.Fatalf("legacy args %q unexpectedly succeeded", args)
 		}
+	}
+}
+
+func TestFailedSourceAddRetriesTheAddWithoutCredentials(t *testing.T) {
+	source := envsource.Source{
+		Name: "team",
+		Type: envsource.TypeGit,
+		URL:  "https://user:s3cret-token@github.com/example/private-env.git",
+		Ref:  "main",
+	}
+	failure := sourceAddSyncError(source, &envsync.CloneError{URL: source.URL, Err: errors.New("exit status 128")})
+
+	var buf bytes.Buffer
+	if err := cli.WriteJSONFailure(&buf, "orbit source add --json", nil, failure, nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "s3cret-token") {
+		t.Fatalf("credential leaked into JSON:\n%s", buf.String())
+	}
+	envelope := decodeEnvelope(t, buf.Bytes())
+	if envelope.Error == nil || envelope.Error.Code != "env_repo_access" {
+		t.Fatalf("error = %+v", envelope.Error)
+	}
+	retry := "orbit source add team --url https://github.com/example/private-env.git --ref main"
+	commands := make([]string, 0, len(envelope.RecommendedActions))
+	for _, action := range envelope.RecommendedActions {
+		commands = append(commands, action.Command)
+	}
+	want := []string{retry + " --json", "gh auth login", "gh auth setup-git"}
+	if strings.Join(commands, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("recommended_actions = %q, want %q", commands, want)
+	}
+	if envelope.Error.NextCommand != retry+" --json" {
+		t.Fatalf("next_command = %q", envelope.Error.NextCommand)
+	}
+	if !strings.Contains(envelope.Error.Message, "retry `"+retry+"`") ||
+		strings.Contains(envelope.Error.Message, "orbit source sync") {
+		t.Fatalf("message = %q", envelope.Error.Message)
+	}
+
+	var human bytes.Buffer
+	printExecutionError(&human, failure)
+	if strings.Contains(human.String(), "s3cret-token") || strings.Contains(human.String(), "orbit source sync") ||
+		!strings.Contains(human.String(), "Next: "+retry+"\n") {
+		t.Fatalf("human output:\n%s", human.String())
+	}
+}
+
+func TestFailedSourceAddWithoutGitRetriesTheAdd(t *testing.T) {
+	source := envsource.Source{Name: "team", Type: envsource.TypeGit, URL: "https://git.example.com/env.git", Workspace: "/work/my app"}
+	failure := sourceAddSyncError(source, &envsync.CloneError{URL: source.URL, Err: exec.ErrNotFound})
+
+	var buf bytes.Buffer
+	if err := cli.WriteJSONFailure(&buf, "orbit source add --json", nil, failure, nil); err != nil {
+		t.Fatal(err)
+	}
+	envelope := decodeEnvelope(t, buf.Bytes())
+	retry := "orbit source add team --url https://git.example.com/env.git --workspace '/work/my app'"
+	if len(envelope.RecommendedActions) != 1 || envelope.RecommendedActions[0].Command != retry+" --json" {
+		t.Fatalf("recommended_actions = %+v", envelope.RecommendedActions)
+	}
+	if !strings.Contains(envelope.Error.Message, "Install Git") || !strings.Contains(envelope.Error.Message, "retry `"+retry+"`") {
+		t.Fatalf("message = %q", envelope.Error.Message)
 	}
 }
