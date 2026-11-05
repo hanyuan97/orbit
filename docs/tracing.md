@@ -116,27 +116,16 @@ severity, body, trace and span ids, scope, and attributes, including
 attributed to the resource's `service.name`, like spans. Metrics sent to
 `/v1/metrics` are accepted and dropped.
 
-```bash
-orbit trace logs                              # newest 100 records, oldest first on screen
-orbit trace logs --service api --severity warn
-orbit trace logs --trace <trace-id>           # every record of one request
-orbit trace logs --search "card declined"     # body or any attribute value
-orbit trace logs --since 1234                 # only records after seq 1234
-orbit trace logs --json                       # structured page (for agents)
-```
-
-Each line prints the time, level, service, body and trace id, with the
-exception on the lines below. The footer names the `--since` value that reads
-only newer records, and says when a `--since` value did not come from the
-running daemon. `orbit logs <resource>` is unchanged and still shows the
-resource's stdout.
+`orbit trace logs` lists them, `orbit trace <id> --logs` shows the records of
+one trace, and `orbit logs <resource>` is unchanged and still shows the
+resource's stdout. Flags, the JSON page and `--since` paging are in
+[agent-cli.md](agent-cli.md#log-records).
 
 Records live in one in-memory ring shared by every service and are dropped on
 `orbit down`. The ring is bounded by record count and by bytes, evicting the
 oldest records past either bound. Very long body and attribute values are
 truncated, and attributes past the OpenTelemetry default count limit are
-dropped. The JSON contract, including `--since` paging, is in
-[agent-cli.md](agent-cli.md#log-records).
+dropped.
 
 ## Logs ↔ traces
 

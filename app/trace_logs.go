@@ -73,7 +73,7 @@ func runTraceLogs(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	page, err := listLogRecords(client, logRecordLimit, logRecordSeverity, filter)
+	page, err := listLogRecords(client, logRecordLimit, filter)
 	if err != nil {
 		return fmt.Errorf("log records failed: %w", err)
 	}
@@ -89,16 +89,17 @@ func runTraceLogs(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// listLogRecords queries GET /api/otel/logs. severity is passed as typed so
-// the daemon applies the same parse.
-func listLogRecords(c *daemon.Client, limit int, severity string, f tracing.LogFilter) (*tracing.LogPage, error) {
+// listLogRecords queries GET /api/otel/logs. MinSeverity travels as its OTLP
+// number, which the daemon's ParseSeverity accepts like a level name.
+func listLogRecords(c *daemon.Client, limit int, f tracing.LogFilter) (*tracing.LogPage, error) {
 	q := url.Values{"limit": {strconv.Itoa(limit)}}
-	for key, value := range map[string]string{
-		"service": f.Service, "severity": severity, "trace": f.TraceID, "search": f.Search,
-	} {
+	for key, value := range map[string]string{"service": f.Service, "trace": f.TraceID, "search": f.Search} {
 		if value != "" {
 			q.Set(key, value)
 		}
+	}
+	if f.MinSeverity > 0 {
+		q.Set("severity", strconv.Itoa(int(f.MinSeverity)))
 	}
 	if f.HasSince {
 		q.Set("since", strconv.FormatInt(f.Since, 10))

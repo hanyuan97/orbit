@@ -100,7 +100,7 @@ func TestTraceLogsJSONEnvelope(t *testing.T) {
 
 	q := <-queries
 	for key, want := range map[string]string{
-		"service": "api", "severity": "warning", "trace": logsTraceID, "search": "Declined", "since": "3", "limit": "2",
+		"service": "api", "severity": "13", "trace": logsTraceID, "search": "Declined", "since": "3", "limit": "2",
 	} {
 		if got := q.Get(key); got != want {
 			t.Errorf("query %s = %q, want %q", key, got, want)

@@ -108,24 +108,13 @@ attributes，包含 `exception.type`、`exception.message`、`exception.stacktra
 Record 跟 span 一樣依 resource 的 `service.name` 歸屬。送到 `/v1/metrics` 的
 metrics 會被接受後丟棄。
 
-```bash
-orbit trace logs                              # 最新 100 筆，畫面上由舊到新
-orbit trace logs --service api --severity warn
-orbit trace logs --trace <trace-id>           # 一個 request 的所有 record
-orbit trace logs --search "card declined"     # 比對 body 或任一 attribute 值
-orbit trace logs --since 1234                 # 只取 seq 1234 之後的 record
-orbit trace logs --json                       # 結構化結果（給 agent）
-```
-
-每行印出時間、等級、service、body 與 trace id，exception 印在下面幾行。
-結尾會提示只讀更新 record 時要帶的 `--since` 值；`--since` 的值不是目前這個
-daemon 發出的時，結尾也會註明。`orbit logs <resource>` 不變，仍然顯示
-resource 的 stdout。
+`orbit trace logs` 列出 record，`orbit trace <id> --logs` 顯示單一 trace 的
+record；`orbit logs <resource>` 不變，仍然顯示 resource 的 stdout。Flag、JSON
+頁面與 `--since` 分頁見 [agent-cli.md](agent-cli.md#log-records)。
 
 所有 service 共用一個 in-memory ring，`orbit down` 即清空。Ring 同時以筆數和
 bytes 設上限，超過任一上限就淘汰最舊的 record。過長的 body 或 attribute 值會
-被截斷，超過 OpenTelemetry 預設數量上限的 attribute 會被丟棄。JSON contract
-（含 `--since` 分頁）見 [agent-cli.md](agent-cli.md#log-records)。
+被截斷，超過 OpenTelemetry 預設數量上限的 attribute 會被丟棄。
 
 ## Logs ↔ traces
 

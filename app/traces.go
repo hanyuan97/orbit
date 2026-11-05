@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/iml885203/orbit/cli"
 	"github.com/iml885203/orbit/daemon"
@@ -377,7 +376,7 @@ func runTraceShow(_ *cobra.Command, args []string) error {
 			return cli.WriteJSONSuccess(os.Stdout, commandString(), trace, nil)
 		}
 		logs := []tracing.LogRecord{}
-		if page, err := traceLogRecords(client, trace.TraceID); err != nil {
+		if page, err := listLogRecords(client, 0, tracing.LogFilter{TraceID: trace.TraceID}); err != nil {
 			cli.AddJSONNotice(cli.JSONNotice{
 				Code:    "log_records_unavailable",
 				Message: fmt.Sprintf("log records unavailable: %v", err),
@@ -401,10 +400,6 @@ func runTraceShow(_ *cobra.Command, args []string) error {
 type traceWithLogRecords struct {
 	*tracing.Trace
 	Logs []tracing.LogRecord `json:"logs"`
-}
-
-func traceLogRecords(c *daemon.Client, traceID string) (*tracing.LogPage, error) {
-	return listLogRecords(c, 0, "", tracing.LogFilter{TraceID: traceID})
 }
 
 // renderWaterfall prints the trace header and a span timeline. Bars are
@@ -479,7 +474,7 @@ func renderTraceLogs(w io.Writer, client *daemon.Client, t *tracing.Trace) {
 func renderTraceLogRecords(w io.Writer, client *daemon.Client, t *tracing.Trace) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, cli.Bold.Sprint("log records for this trace:"))
-	page, err := traceLogRecords(client, t.TraceID)
+	page, err := listLogRecords(client, 0, tracing.LogFilter{TraceID: t.TraceID})
 	if err != nil {
 		fmt.Fprintf(w, "  %s\n", cli.Faint.Sprintf("(log records unavailable: %v)", err))
 		return
@@ -538,28 +533,6 @@ func fmtMs(ms float64) string {
 		return fmt.Sprintf("%dms", int(ms))
 	}
 	return fmt.Sprintf("%.2fs", ms/1000)
-}
-
-// truncate clips s to n runes, marking the cut with "…".
-func truncate(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	if n <= 1 {
-		return string(r[:n])
-	}
-	return string(r[:n-1]) + "…"
-}
-
-// padRight and padLeft pad to n runes; fmt's %-Ns counts bytes, which
-// misaligns any cell holding a multi-byte rune such as "…" or "→".
-func padRight(s string, n int) string {
-	return s + strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s)))
-}
-
-func padLeft(s string, n int) string {
-	return strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s))) + s
 }
 
 func clamp(v, lo, hi int) int {

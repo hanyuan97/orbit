@@ -3,6 +3,7 @@ package tracing
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -146,9 +147,7 @@ func (l *LogStore) Query(limit int, f LogFilter) LogPage {
 				break
 			}
 		}
-		for i, j := 0, len(page.Logs)-1; i < j; i, j = i+1, j-1 {
-			page.Logs[i], page.Logs[j] = page.Logs[j], page.Logs[i]
-		}
+		slices.Reverse(page.Logs)
 		return page
 	}
 	for i := len(l.records) - 1; i >= 0; i-- {
