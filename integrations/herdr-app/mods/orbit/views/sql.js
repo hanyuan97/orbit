@@ -1,10 +1,10 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { clock } from "../model.js";
+import { clock, ago } from "../model.js";
 import { chip, card, cardHeader, note, errorRow, button, ICONS } from "./widgets.js";
 
 const DOT = "\u{25cf}";
-const LABELS = { "in-sync": "in sync", changed: "changed", "not-published": "not published", unknown: "unknown" };
+const LABELS = { "in-sync": "in sync", changed: "changed", "not-published": "not published", pending: "checking", unknown: "unknown" };
 
 function statusColor(t, status) {
   if (status === "in-sync") return t.ansi2;
@@ -19,6 +19,7 @@ function headerRow(t) {
     .child(div().w(170).flex_none().child("PROJECT"))
     .child(div().w(210).flex_none().child("DATABASE"))
     .child(div().w(110).flex_none().child("STATUS"))
+    .child(div().w(100).flex_none().child("PUBLISHED"))
     .child(div().flex_1().min_w(0).child("DETAIL"));
 }
 
@@ -29,6 +30,7 @@ function dbRow(t, row) {
     .child(div().w(170).flex_none().min_w(0).truncate().text_color(t.muted).child(row.project))
     .child(div().w(210).flex_none().min_w(0).truncate().font_semibold().child(row.db))
     .child(div().w(110).flex_none().text_color(color).child(LABELS[row.status] ?? row.status))
+    .child(div().w(100).flex_none().text_color(t.muted).child(ago(row.publishedAt) || "\u{2014}"))
     .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(row.detail));
 }
 

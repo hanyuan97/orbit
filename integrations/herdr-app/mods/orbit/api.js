@@ -279,31 +279,44 @@ function sqlFromDiff(target, data) {
 }
 
 /**
- * Each database of the environment's SQL projects, or null when the environment has no SQL Server
- * workflow. Only databases with a publish record get `sqlserver diff`: on one Orbit never published
- * it runs the full SqlPackage comparison (seconds each).
+ * Each database of the environment's SQL projects with Orbit's own publish record, or null when the
+ * environment has no SQL Server workflow. One quick CLI call; nothing is compared yet.
  */
-export async function loadSql(instance) {
-  const target = targetArgs(instance);
+export async function loadSqlList(instance) {
   let data;
   try {
-    data = await orbitData([...target, "sqlserver", "list", "--json"]);
+    data = await orbitData([...targetArgs(instance), "sqlserver", "list", "--json"]);
   } catch (error) {
     if (error?.code === "not_configured") return null;
     throw error;
   }
-  const databases = asArray(data.projects).map(asObject)
-    .flatMap((project) => asArray(project.databases).map((db) => ({ project: asText(project.name), db: asText(db) })));
-  const published = Array.isArray(data.publish_records)
-    ? new Set(data.publish_records.map(asObject).filter((one) => one.last_publish != null).map((one) => asText(one.database)))
-    : null;
-  return mapLimit(databases, SQL_DIFF_CONCURRENCY, async (one) => {
-    if (!published) return { ...one, status: "unknown", detail: "Needs Orbit 0.16.10 or later" };
-    if (!published.has(one.db)) return { ...one, status: "not-published", detail: "Not published" };
+  const records = Array.isArray(data.publish_records) ? data.publish_records.map(asObject) : null;
+  const publishedAt = new Map((records ?? [])
+    .filter((one) => one.last_publish != null)
+    .map((one) => [asText(one.database), Date.parse(asText(asObject(one.last_publish).at)) || null]));
+  return asArray(data.projects).map(asObject).flatMap((project) => asArray(project.databases).map((name) => {
+    const one = { project: asText(project.name), db: asText(name), publishedAt: publishedAt.get(asText(name)) ?? null };
+    if (!records) return { ...one, status: "unknown", detail: "Needs Orbit 0.16.10 or later" };
+    if (!publishedAt.has(one.db)) return { ...one, status: "not-published", detail: "Not published" };
+    return { ...one, status: "pending", detail: "Comparing with the project..." };
+  }));
+}
+
+/**
+ * Compares each published database with its project and reports every result as it arrives.
+ * A database Orbit never published is skipped: the diff would run a full SqlPackage comparison
+ * (seconds each) only to say it differs.
+ */
+export async function diffSql(instance, rows, onRow) {
+  const target = targetArgs(instance);
+  const pending = rows.filter((one) => one.status === "pending");
+  await mapLimit(pending, SQL_DIFF_CONCURRENCY, async (one) => {
+    let row;
     try {
-      return sqlFromDiff(one, await orbitData([...target, "sqlserver", "diff", one.db, "--json"]));
+      row = sqlFromDiff(one, await orbitData([...target, "sqlserver", "diff", one.db, "--json"]));
     } catch (error) {
-      return { ...one, status: "unknown", detail: errorText(error) };
+      row = { ...one, status: "unknown", detail: errorText(error) };
     }
+    onRow(row);
   });
 }

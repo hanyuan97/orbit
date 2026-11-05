@@ -22,7 +22,7 @@ The mod is one pane with the theme's `t.chrome` background, `t.foreground` text,
    - **Resources**: a rounded card "Resources" with the total count, a header row (24px) and 26px rows. Columns: 12px state dot, NAME 150, KIND 78, STATE 104 (`state · phase` while starting), PORTS 170, UPTIME 70, RESTARTS 66 (`t.ansi3` if above 0), then URL in `t.accent`. Services sort first, then other kinds, by name. State colors: healthy/running/ready `t.ansi2`; starting, building, pending, probing, restarting, stopping `t.ansi3`; unhealthy, degraded, failed, error, crashed, exited, port_conflict, blocked `t.ansi1`; anything else `t.dim`. Selected row `t.selected`. Clicking a row opens a **side panel**, 400px wide, absolutely positioned over the right edge of the table (it does not narrow the table), `t.background` with a left border and large shadow. It shows kind, name, a state chip, a restarts chip, role/image/startup/health facts, the URL and sidecar URLs as `t.accent` links, and buttons Open `o`, Logs `l`, Restart `R`, Stop `S`.
    - **Logs**: a card "Logs · <resource>" with line count and updated time; a wrapped row of resource picker chips (22px, with a state dot); a tool row with a filter input (placeholder `filter lines  /`), **Following/Paused** (`f`), **Copy**, and primary **Ask agent** (`c`); then a virtualized list of 18px lines, 11.5px. A line with fail/error/crit/fatal/exception/unhandled/err is `t.ansi1`; warn/warning is `t.ansi3`.
    - **Traces**: card "Recent traces" with buttons **All traces / Errors only** (`e`) and **No health checks / With health checks** (`h`). Rows (26px): time, `ok` (`t.ansi2`) or `ERROR` (`t.ansi1`), root service (color hashed from the service name over `t.ansi4, t.ansi5, t.ansi6, t.ansi2, t.ansi3, t.ansi12, t.ansi13, t.ansi14`), root span name, duration, span count, services. Opening one shows a header card (Copy id, Ask agent `c`, Back `esc`, chips for status, duration, spans), a **Waterfall** card (22px rows: indented service and name in a 320px column, a 260px bar track with the span's offset and width, min 2px, error spans `t.ansi1`, duration, kind), and a **Logs with this trace id** card (last 400 lines).
-   - **SQL**: card "SQL" with `N in sync` (`t.ansi2`) and `N changed` (`t.ansi3`) chips and a **Check** button. Rows: PROJECT 170, DATABASE 210, STATUS 110, DETAIL. Status colors: in sync `t.ansi2`, changed `t.ansi3`, unknown `t.ansi1`, not published `t.dim`.
+   - **SQL**: card "SQL" with `N in sync` (`t.ansi2`) and `N changed` (`t.ansi3`) chips and a **Check** button. Rows: PROJECT 170, DATABASE 210, STATUS 110, PUBLISHED 100 (`2h ago`, or a dash), DETAIL. Status colors: in sync `t.ansi2`, changed `t.ansi3`, unknown `t.ansi1`, checking and not published `t.dim`.
 
 Window buttons (24px tall, `t.raised`, each a Nerd Font icon then its text): while floating, **Split** (`\u{eb56}`), **Tab** (`\u{f2d2}`), and a 24px icon-only close (`\u{f00d}`). Once docked or a tab, a single **Float** button (`\u{f2d0}`) with a `cmd-enter` badge. The side panel's close is the same icon at 22px; **Stop daemon** carries `\u{f011}`.
 
@@ -45,7 +45,7 @@ Window buttons (24px tall, `t.raised`, each a Nerd Font icon then its text): whi
 
 **Daemon stopped.** The status falls back to `orbit status --json`, retried at most every 15 seconds. All resources show as `stopped`, the neutral "Stopped" banner appears, and the header shows the `stopped` chip. Logs and Traces show "Orbit is stopped, so there are no live logs/traces", SQL shows "Orbit is stopped, so SQL status is not checked." No logs, traces or SQL calls are made. Restart/Stop explain that they need the daemon. When the daemon comes back, the next tick picks it up.
 
-**SQL.** Each database of the environment's SQL projects is listed. A database with no publish record shows `not published` and is not diffed. One with a record is compared: `in sync`, or `changed` with `N files changed since publish` or `+created ~altered -dropped`. At most 4 diffs run at once. An environment without SQL Server shows "This environment has no SQL Server workflow."
+**SQL.** Loading takes two steps. First `orbit sqlserver list` (one quick call) gives every database of the environment's SQL projects and Orbit's publish record for each, and the rows show at once with the last publish time. A database with no publish record shows `not published` and is not diffed. One with a record reads `checking` until its `orbit sqlserver diff` returns, then `in sync`, or `changed` with `N files changed since publish` or `+created ~altered -dropped`. At most 4 diffs run at once, and each row updates as its own diff finishes. An environment without SQL Server shows "This environment has no SQL Server workflow."
 
 **Ask agent.** In Logs (`c`) it sends the visible (filtered) lines; in an open trace it sends the summary, waterfall, error span attributes and trace-id logs. Each section is clipped to 12000 characters. The text is written to `ask-<timestamp>.md` in the Herdr app data folder under `data/orbit/` (newest 20 kept) and the agent is told to read it; short single-line text is sent inline. The target is the name typed in the agent-target field, matched against terminal names, addresses, Claude session names and tab names (exact first, then case-insensitive), and must be running `claude`. Otherwise a new tab opens running `claude` with the text as its task, in the focused folder, and a toast says why. After sending, the Orbit mod docks beside that agent's pane and the float closes. The prompts tell the agent not to restart, stop or reconfigure resources unless asked.
 
@@ -68,7 +68,7 @@ Modules: `panel.js` (state, timers, keys, rendering root), `actions.js` (loads, 
 Data sources. Every `orbit` call runs with `cwd` = `home()` so a project's `orbit.yaml` is never picked up, and carries `--instance <name>` (named instances) and `-c <config path>` (both kinds). If `orbit` is not on PATH it retries `~/.local/bin/orbit`.
 - `orbit inspect --json` (default runtime: selected env, daemon running, dashboard URL, config path) and `orbit instance list --json` (named instances: name, environment, state, dashboard, config path, resource states).
 - `orbit status --json` (when the daemon is stopped).
-- `orbit sqlserver list --json` and `orbit sqlserver diff <db> --json`; `not_configured` means no SQL workflow.
+- `orbit sqlserver list --json` (`projects` and `publish_records`, each record's `last_publish.at`) and `orbit sqlserver diff <db> --json`; `not_configured` means no SQL workflow.
 - `orbit down --json` then `orbit daemon stop --json`.
 - The instance's dashboard over `fetch`: `GET /api/status`, `GET /api/logs/<name>?lines=1000`, `GET /api/traces?limit=100[&include_health=1]`, `GET /api/traces/<id>`, `GET /api/traces/<id>/logs`, `POST /api/restart/<name>`, `POST /api/stop/<name>` (body `{}`).
 - CLI responses are `{ok, data}` or `{ok:false, error:{code,message,hint}}`.
@@ -87,7 +87,7 @@ Art: Nerd Font glyphs only (`\u{f1b3}` orbit, `\u{f233}` resources, `\u{f15c}` l
 - **Generation guard.** Each instance switch bumps a counter; every load captures it and discards its result if it changed (A to B to A included). Two overlapping loads of the same kind are blocked by `loading` flags.
 - **Always target the shown instance.** Forgetting `--instance` or `-c` makes `orbit` act on the default runtime. Never run from a project directory.
 - **Stop daemon needs `down` first.** `daemon stop` alone leaves containers running with no supervisor.
-- **Orbit version.** The SQL tab needs `orbit sqlserver list --json` to include `publish_records` (Orbit 0.16.10 or later); older versions show `unknown: Needs Orbit 0.16.10 or later` for each database. A database with no publish record is not diffed because the diff would run a full SqlPackage comparison (seconds each).
+- **Orbit version.** The SQL tab needs `orbit sqlserver list --json` to include `publish_records` (Orbit 0.16.10 or later); older versions show `unknown: Needs Orbit 0.16.10 or later` for each database. Right after an upgrade, a runtime still running the old daemon answers `orbit_update_pending` until `orbit daemon restart`; the SQL error row shows that message. A database with no publish record is not diffed because the diff would run a full SqlPackage comparison (seconds each).
 - **Status errors vs unreachable.** A daemon that answers with an error keeps the last resources and shows an error row; only a connection failure or missing dashboard falls back to the CLI.
 - **Docked visibility.** A docked copy is considered visible only if its tab is the active one in the active space; otherwise it stops polling.
 - **Side panel is absolute.** It overlays the table; the table's `relative()` parent is required.
@@ -104,8 +104,18 @@ Art: Nerd Font glyphs only (`\u{f1b3}` orbit, `\u{f233}` resources, `\u{f15c}` l
 - `R` on a running resource turns the button red; a second press within 6 seconds sends `POST /api/restart/<name>`; waiting out 6 seconds disarms it.
 - Logs shows the picked resource's last lines, errors in `t.ansi1`, filter narrows them, `f` pauses polling, `[` and `]` change resource.
 - Traces lists recent traces; opening one shows a waterfall and trace-id logs; `e` and `h` toggle the filters.
-- SQL lists databases with in sync / changed / not published states, or the no-workflow message.
+- SQL lists every database at once with its last publish time; published ones read `checking`, then turn in sync or changed one by one; never-published ones read not published; or the no-workflow message.
 - Pressing Stop daemon twice runs `orbit down` then `orbit daemon stop`; afterwards the neutral `Stopped — <env>` banner shows, the resources read `stopped`, Logs/Traces/SQL show their stopped messages, and no logs, traces or SQL calls happen (check with a process listing).
 - Running `orbit up` again brings it back within a few seconds without touching the panel.
 - Ask agent with a running Claude's name in the target field sends a one-line pointer to an `ask-*.md` file in the Herdr app data folder; with an empty or unknown name it opens a new `claude` tab and says so.
 - Split docks beside the focused pane, Tab opens an "Orbit" tab, Float returns to the window, and closing and reopening repeatedly does not leave extra command loops or timers behind.
+
+## Updating
+
+Herdr never overwrites a mod that is already installed: asking an agent to add this folder again installs a second copy under a new name. To update, ask for a replacement instead:
+
+```text
+Read ~/.config/herdr-app/AGENTS.md, then update my orbit mod: replace ~/.config/herdr-app/mods/orbit with the files from https://github.com/iml885203/orbit/tree/main/integrations/herdr-app/mods/orbit and run herdr-app check on it.
+```
+
+`keys.json` rarely changes; merge it again only if the commit history of `integrations/herdr-app/keys.json` shows a change. Saved state (`orbit.ui`, `orbit.agentTarget`) is kept. If the mod was renamed on install (for example `orbit-2`), name that folder instead.

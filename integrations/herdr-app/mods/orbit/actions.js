@@ -1,4 +1,4 @@
-import { loadInstances, loadDaemonStatus, loadCliStatus, loadLogs, loadTraces, loadTrace, loadTraceLogs, loadSql, runAction, stopDaemon, errorText } from "./api.js";
+import { loadInstances, loadDaemonStatus, loadCliStatus, loadLogs, loadTraces, loadTrace, loadTraceLogs, loadSqlList, diffSql, runAction, stopDaemon, errorText } from "./api.js";
 import { askAgent, logsPrompt, tracePrompt } from "./ask.js";
 import { dockBeside } from "./dock.js";
 import { isErrorTrace } from "./model.js";
@@ -106,8 +106,17 @@ export function reloadSql(panel, cx) {
   panel.set({ sql: { ...panel.state.sql, loading: true } });
   cx.spawn(async (cx) => {
     try {
-      const list = await loadSql(instance);
-      if (isCurrent(panel, generation)) panel.set({ sql: { list: list ?? [], configured: list !== null, live, error: "", loading: false, at: Date.now() } });
+      // The list is one quick call, so the rows show at once; the slow diffs then fill them in.
+      const list = await loadSqlList(instance);
+      if (!isCurrent(panel, generation)) return;
+      panel.set({ sql: { list: list ?? [], configured: list !== null, live, error: "", loading: true, at: Date.now() } });
+      cx.notify();
+      await diffSql(instance, list ?? [], (row) => {
+        if (!isCurrent(panel, generation)) return;
+        panel.set({ sql: { ...panel.state.sql, list: panel.state.sql.list.map((one) => (one.db === row.db ? row : one)) } });
+        cx.notify();
+      });
+      if (isCurrent(panel, generation)) panel.set({ sql: { ...panel.state.sql, loading: false, at: Date.now() } });
     } catch (error) {
       if (isCurrent(panel, generation)) panel.set({ sql: { ...panel.state.sql, live, loading: false, error: `SQL: ${errorText(error)}`, at: Date.now() } });
     } finally {
