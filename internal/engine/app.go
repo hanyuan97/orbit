@@ -356,7 +356,7 @@ func readinessCheckForResource(
 			return resourceReadinessCheck(
 				container.HealthCheck,
 				container.Ports,
-				cfg.Settings.HealthCheckInterval,
+				cfg.Settings,
 			)
 		}
 		return nil
@@ -365,7 +365,7 @@ func readinessCheckForResource(
 		return resourceReadinessCheck(
 			service.HealthCheck,
 			service.Ports,
-			cfg.Settings.HealthCheckInterval,
+			cfg.Settings,
 		)
 	}
 	return nil
@@ -374,7 +374,7 @@ func readinessCheckForResource(
 func resourceReadinessCheck(
 	explicit *config.HealthCheckConfig,
 	ports map[string]config.PortDef,
-	interval time.Duration,
+	settings config.RuntimeSettings,
 ) *config.HealthCheckConfig {
 	if explicit != nil {
 		return explicit
@@ -386,10 +386,10 @@ func resourceReadinessCheck(
 	return &config.HealthCheckConfig{
 		Type:             "tcp",
 		Port:             port,
-		Interval:         interval,
-		Timeout:          5 * time.Second,
-		Retries:          config.DefaultHealthRetries,
-		FailureThreshold: config.DefaultHealthFailureThreshold,
+		Interval:         settings.HealthCheckInterval,
+		Timeout:          settings.HealthCheck.Timeout,
+		Retries:          settings.HealthCheck.Retries,
+		FailureThreshold: settings.HealthCheck.FailureThreshold,
 	}
 }
 
