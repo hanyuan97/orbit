@@ -376,11 +376,16 @@ func runTraceShow(_ *cobra.Command, args []string) error {
 		if !traceShowLogs {
 			return cli.WriteJSONSuccess(os.Stdout, commandString(), trace, nil)
 		}
-		page, err := traceLogRecords(client, trace.TraceID)
-		if err != nil {
-			return fmt.Errorf("trace log records failed: %w", err)
+		logs := []tracing.LogRecord{}
+		if page, err := traceLogRecords(client, trace.TraceID); err != nil {
+			cli.AddJSONNotice(cli.JSONNotice{
+				Code:    "log_records_unavailable",
+				Message: fmt.Sprintf("log records unavailable: %v", err),
+			})
+		} else {
+			logs = page.Logs
 		}
-		return cli.WriteJSONSuccess(os.Stdout, commandString(), traceWithLogRecords{Trace: trace, Logs: page.Logs}, nil)
+		return cli.WriteJSONSuccess(os.Stdout, commandString(), traceWithLogRecords{Trace: trace, Logs: logs}, nil)
 	}
 
 	renderWaterfall(os.Stdout, trace)

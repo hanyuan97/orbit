@@ -118,13 +118,14 @@ orbit trace logs --json                       # 結構化結果（給 agent）
 ```
 
 每行印出時間、等級、service、body 與 trace id，exception 印在下面幾行。
-結尾會提示只讀更新 record 時要帶的 `--since` 值。`orbit logs <resource>` 不變，
-仍然顯示 resource 的 stdout。
+結尾會提示只讀更新 record 時要帶的 `--since` 值；`--since` 的值不是目前這個
+daemon 發出的時，結尾也會註明。`orbit logs <resource>` 不變，仍然顯示
+resource 的 stdout。
 
-所有 service 共用一個 in-memory ring，`orbit down` 即清空。Ring 最多保留
-10,000 筆、約 32 MiB 的 record 資料，超過任一上限就淘汰最舊的。超過 16 KiB 的
-body 或 attribute 值會被截斷。JSON contract（含 `--since` 分頁）見
-[agent-cli.zh-TW.md](agent-cli.zh-TW.md#log-records)。
+所有 service 共用一個 in-memory ring，`orbit down` 即清空。Ring 同時以筆數和
+bytes 設上限，超過任一上限就淘汰最舊的 record。過長的 body 或 attribute 值會
+被截斷，超過 OpenTelemetry 預設數量上限的 attribute 會被丟棄。JSON contract
+（含 `--since` 分頁）見 [agent-cli.md](agent-cli.md#log-records)。
 
 ## Logs ↔ traces
 

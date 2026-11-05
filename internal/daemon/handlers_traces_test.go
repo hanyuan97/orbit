@@ -145,6 +145,8 @@ func TestTracesListQueryParameters(t *testing.T) {
 func TestOTelLogsQueryParameters(t *testing.T) {
 	srv := newTestServer(t, testConfig())
 	const traceA = "0a1b02030405060708090a0b0c0d0e0f"
+	base := srv.tracing.Logs().Query(0, tracing.LogFilter{}).LatestSeq
+	since := func(rel int64) string { return strconv.FormatInt(base+rel, 10) }
 	srv.tracing.Logs().Ingest([]tracing.LogRecord{
 		{Service: "api", SeverityNumber: 9, Body: "request started", TraceID: traceA},
 		{Service: "api", SeverityNumber: 13, Body: "slow query", Attributes: map[string]string{"Reason": "Missing INDEX on orders"}},
@@ -168,37 +170,42 @@ func TestOTelLogsQueryParameters(t *testing.T) {
 	seqs := func(page tracing.LogPage) string {
 		out := make([]string, len(page.Logs))
 		for i, r := range page.Logs {
-			out[i] = strconv.FormatInt(r.Seq, 10)
+			out[i] = strconv.FormatInt(r.Seq-base, 10)
 		}
 		return strings.Join(out, ",")
 	}
 
 	for _, tc := range []struct {
-		query, wantSeqs string
-		wantMore        bool
+		query, wantSeqs     string
+		wantMore, wantReset bool
 	}{
-		{"", "4,3,2,1", false},
-		{"?service=api", "2,1", false},
-		{"?service=Payments.Api", "4", false},
-		{"?severity=warning", "3,2", false},
-		{"?severity=error", "3", false},
-		{"?trace=" + strings.ToUpper(traceA), "3,1", false},
-		{"?search=missing%20index", "2", false},
-		{"?search=BOOM", "3", false},
-		{"?limit=2", "4,3", true},
-		{"?since=1&limit=2", "3,2", true},
-		{"?since=3&limit=2", "4", false},
-		{"?since=4", "", false},
-		{"?service=api&severity=warn&search=slow", "2", false},
+		{"", "4,3,2,1", false, false},
+		{"?service=api", "2,1", false, false},
+		{"?service=Payments.Api", "4", false, false},
+		{"?severity=warning", "3,2", false, false},
+		{"?severity=error", "3", false, false},
+		{"?trace=" + strings.ToUpper(traceA), "3,1", false, false},
+		{"?search=missing%20index", "2", false, false},
+		{"?search=BOOM", "3", false, false},
+		{"?limit=2", "4,3", true, false},
+		{"?since=0&limit=2", "2,1", true, false},
+		{"?since=" + since(0) + "&limit=2", "2,1", true, false},
+		{"?since=" + since(1) + "&limit=2", "3,2", true, false},
+		{"?since=" + since(3) + "&limit=2", "4", false, false},
+		{"?since=" + since(4), "", false, false},
+		{"?since=" + since(1000) + "&limit=3", "3,2,1", true, true},
+		{"?severity=Verbose", "4,3,2,1", false, false},
+		{"?service=api&severity=warn&search=slow", "2", false, false},
 	} {
 		code, page := query(tc.query)
 		if code != http.StatusOK {
 			t.Errorf("%q: status %d", tc.query, code)
 			continue
 		}
-		if got := seqs(page); got != tc.wantSeqs || page.HasMore != tc.wantMore || page.LatestSeq != 4 {
-			t.Errorf("%q: seqs=%s hasMore=%v latestSeq=%d, want seqs=%s hasMore=%v latestSeq=4",
-				tc.query, got, page.HasMore, page.LatestSeq, tc.wantSeqs, tc.wantMore)
+		if got := seqs(page); got != tc.wantSeqs || page.HasMore != tc.wantMore || page.CursorReset != tc.wantReset ||
+			page.LatestSeq != base+4 {
+			t.Errorf("%q: seqs=%s hasMore=%v cursorReset=%v latestSeq=+%d, want seqs=%s hasMore=%v cursorReset=%v latestSeq=+4",
+				tc.query, got, page.HasMore, page.CursorReset, page.LatestSeq-base, tc.wantSeqs, tc.wantMore, tc.wantReset)
 		}
 	}
 

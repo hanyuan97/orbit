@@ -88,10 +88,11 @@ type TracingStatus struct {
 }
 
 // LogRecord is one OTLP log record. Seq is assigned by Orbit on ingest and
-// increases monotonically across every service, so a reader can resume after
-// the last record it saw. TimeUnixNano is 0 when the exporter did not stamp
-// the event; ObservedTimeUnixNano falls back to the receive time.
-// SeverityNumber follows the OTLP scale (1-24; 0 = unspecified).
+// increases across every service and, starting from the wall clock, across
+// daemon restarts, so a reader can resume after the last record it saw.
+// TimeUnixNano is 0 when the exporter did not stamp the event;
+// ObservedTimeUnixNano falls back to the receive time. SeverityNumber follows
+// the OTLP scale (1-24; 0 = unspecified).
 type LogRecord struct {
 	Seq                  int64             `json:"seq"`
 	TimeUnixNano         int64             `json:"timeUnixNano"`
@@ -107,11 +108,14 @@ type LogRecord struct {
 }
 
 // LogPage is one query over the log-record store, newest first. LatestSeq is
-// the newest stored record's Seq regardless of filters (0 when empty), so a
-// reader can take a cursor before acting. HasMore reports that the limit
-// withheld matching records.
+// the highest Seq the store has assigned, regardless of filters, so a reader
+// can take a cursor before acting. HasMore reports that the limit withheld
+// matching records. CursorReset reports that the since cursor is beyond
+// LatestSeq, so this daemon did not issue it (it restarted, or the clock
+// stepped back); the page then starts at the oldest retained record.
 type LogPage struct {
-	Logs      []LogRecord `json:"logs"`
-	LatestSeq int64       `json:"latestSeq"`
-	HasMore   bool        `json:"hasMore"`
+	Logs        []LogRecord `json:"logs"`
+	LatestSeq   int64       `json:"latestSeq"`
+	HasMore     bool        `json:"hasMore"`
+	CursorReset bool        `json:"cursorReset"`
 }

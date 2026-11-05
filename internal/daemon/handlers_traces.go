@@ -74,8 +74,8 @@ func (s *Server) handleTracesList(w http.ResponseWriter, r *http.Request) {
 
 // handleOTelLogs returns OTLP log records newest-first as a tracing.LogPage.
 // ?service=, ?severity= (minimum level), ?trace=, ?search= and ?since= (Seq,
-// exclusive) narrow the records inside the store, before ?limit= (default 100,
-// 0 = all). A service must be a configured resource or have sent records:
+// exclusive; present means paging, so since=0 reads from the oldest record)
+// narrow the records inside the store, before ?limit= (default 100, 0 = all). A service must be a configured resource or have sent records:
 // a misspelled name is an error, not an empty page.
 func (s *Server) handleOTelLogs(w http.ResponseWriter, r *http.Request) {
 	if requireMethod(w, r, http.MethodGet) {
@@ -93,10 +93,11 @@ func (s *Server) handleOTelLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	filter := tracing.LogFilter{
-		Service: q.Get("service"),
-		TraceID: q.Get("trace"),
-		Search:  q.Get("search"),
-		Since:   int64(since),
+		Service:  q.Get("service"),
+		TraceID:  q.Get("trace"),
+		Search:   q.Get("search"),
+		HasSince: q.Has("since"),
+		Since:    since,
 	}
 	if v := q.Get("severity"); v != "" {
 		if filter.MinSeverity, err = tracing.ParseSeverity(v); err != nil {
@@ -109,14 +110,14 @@ func (s *Server) handleOTelLogs(w http.ResponseWriter, r *http.Request) {
 		writeUnknownResource(w, filter.Service)
 		return
 	}
-	writeJSON(w, http.StatusOK, logs.Query(limit, filter))
+	writeJSON(w, http.StatusOK, logs.Query(int(limit), filter))
 }
 
-func nonNegativeQueryInt(v string, fallback int) (int, error) {
+func nonNegativeQueryInt(v string, fallback int64) (int64, error) {
 	if v == "" {
 		return fallback, nil
 	}
-	n, err := strconv.Atoi(v)
+	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil || n < 0 {
 		return 0, fmt.Errorf("must be a non-negative integer, got %q", v)
 	}

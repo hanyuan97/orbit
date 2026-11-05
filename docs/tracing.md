@@ -127,13 +127,15 @@ orbit trace logs --json                       # structured page (for agents)
 
 Each line prints the time, level, service, body and trace id, with the
 exception on the lines below. The footer names the `--since` value that reads
-only newer records. `orbit logs <resource>` is unchanged and still shows the
+only newer records, and says when a `--since` value did not come from the
+running daemon. `orbit logs <resource>` is unchanged and still shows the
 resource's stdout.
 
 Records live in one in-memory ring shared by every service and are dropped on
-`orbit down`. The ring keeps at most 10,000 records and about 32 MiB of record
-data, evicting the oldest past either limit. A body or attribute value longer
-than 16 KiB is truncated. The JSON contract, including `--since` paging, is in
+`orbit down`. The ring is bounded by record count and by bytes, evicting the
+oldest records past either bound. Very long body and attribute values are
+truncated, and attributes past the OpenTelemetry default count limit are
+dropped. The JSON contract, including `--since` paging, is in
 [agent-cli.md](agent-cli.md#log-records).
 
 ## Logs ↔ traces

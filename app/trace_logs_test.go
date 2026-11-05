@@ -42,6 +42,13 @@ func fixtureLogPage() tracing.LogPage {
 // the trace and log-record reads, and reports each log-record query string.
 func serveTelemetryDaemon(t *testing.T) <-chan url.Values {
 	t.Helper()
+	return serveTelemetryDaemonAnswering(t, http.StatusOK, fixtureLogPage())
+}
+
+// serveTelemetryDaemonAnswering is serveTelemetryDaemon with the log-record
+// response chosen by the test.
+func serveTelemetryDaemonAnswering(t *testing.T, logsStatus int, logsBody any) <-chan url.Values {
+	t.Helper()
 	home, err := os.MkdirTemp(shortTestTempRoot(), "otel-")
 	if err != nil {
 		t.Fatal(err)
@@ -58,7 +65,8 @@ func serveTelemetryDaemon(t *testing.T) <-chan url.Values {
 	mux.HandleFunc("/api/otel/logs", func(w http.ResponseWriter, r *http.Request) {
 		queries <- r.URL.Query()
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(fixtureLogPage())
+		w.WriteHeader(logsStatus)
+		_ = json.NewEncoder(w).Encode(logsBody)
 	})
 	mux.HandleFunc("/api/traces/"+logsTraceID, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -125,6 +133,47 @@ func TestTraceLogsJSONEnvelope(t *testing.T) {
 	})
 }
 
+func TestTraceLogsSendsSinceOnlyWhenGiven(t *testing.T) {
+	for _, tc := range []struct {
+		args      []string
+		wantSince string
+		wantHas   bool
+	}{
+		{[]string{"logs", "--since", "0"}, "0", true},
+		{[]string{"logs"}, "", false},
+	} {
+		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
+			queries := serveTelemetryDaemon(t)
+			isolateTraceCommandGlobals(t, true)
+			cmd := traceCmd()
+			cmd.SetArgs(tc.args)
+
+			captureStdout(t, cmd.Execute)
+
+			if q := <-queries; q.Has("since") != tc.wantHas || q.Get("since") != tc.wantSince {
+				t.Errorf("query = %v, want since present=%v value %q", q, tc.wantHas, tc.wantSince)
+			}
+		})
+	}
+}
+
+func TestTraceLogsFooterFlagsACursorTheDaemonDidNotIssue(t *testing.T) {
+	page := fixtureLogPage()
+	page.CursorReset = true
+	serveTelemetryDaemonAnswering(t, http.StatusOK, page)
+	isolateTraceCommandGlobals(t, false)
+	color.NoColor = true
+	cmd := traceCmd()
+	cmd.SetArgs([]string{"logs", "--since", "99999"})
+
+	output := captureStdout(t, cmd.Execute)
+
+	if !strings.Contains(output, "--since 99999 was not issued by this daemon") ||
+		!strings.Contains(output, "More follow: --since 5.") {
+		t.Errorf("footer should flag the reset cursor and keep paging:\n%s", output)
+	}
+}
+
 func TestTraceLogsRejectsBadFlagsBeforeContactingTheDaemon(t *testing.T) {
 	for _, args := range [][]string{
 		{"logs", "--severity", "loud"},
@@ -189,5 +238,30 @@ func TestTraceShowWithLogsJoinsLogRecords(t *testing.T) {
 	_ = json.Unmarshal(envelope.Data["logs"], &logs)
 	if envelope.Data["traceId"] == nil || envelope.Data["spans"] == nil || len(logs) != 2 {
 		t.Errorf("data should be the trace's fields plus its log records: %s", output)
+	}
+}
+
+func TestTraceShowWithLogsJSONKeepsTheTraceWhenLogRecordsFail(t *testing.T) {
+	serveTelemetryDaemonAnswering(t, http.StatusInternalServerError, daemon.APIResponse{Error: "log store exploded"})
+	isolateTraceCommandGlobals(t, true)
+	cmd := traceCmd()
+	cmd.SetArgs([]string{logsTraceID, "--logs"})
+
+	output := captureStdout(t, cmd.Execute)
+
+	var envelope struct {
+		OK      bool                       `json:"ok"`
+		Data    map[string]json.RawMessage `json:"data"`
+		Notices []cli.JSONNotice           `json:"notices"`
+	}
+	if err := json.Unmarshal([]byte(output), &envelope); err != nil {
+		t.Fatalf("parse envelope: %v\n%s", err, output)
+	}
+	if !envelope.OK || envelope.Data["traceId"] == nil || string(envelope.Data["logs"]) != "[]" {
+		t.Errorf("want ok with the trace and logs: [], got %s", output)
+	}
+	if len(envelope.Notices) != 1 || envelope.Notices[0].Code != "log_records_unavailable" ||
+		!strings.Contains(envelope.Notices[0].Message, "log store exploded") {
+		t.Errorf("notices = %+v, want one log_records_unavailable carrying the daemon error", envelope.Notices)
 	}
 }

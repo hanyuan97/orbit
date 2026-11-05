@@ -204,6 +204,10 @@ func convertLogRecord(lr *logspb.LogRecord, service, scope string, receivedAt ti
 	if lr.GetBody() != nil {
 		body = stringifyValue(lr.GetBody())
 	}
+	attrs := lr.GetAttributes()
+	if len(attrs) > maxLogAttributes {
+		attrs = attrs[:maxLogAttributes]
+	}
 	return LogRecord{
 		TimeUnixNano:         int64(lr.GetTimeUnixNano()),
 		ObservedTimeUnixNano: observed,
@@ -214,7 +218,7 @@ func convertLogRecord(lr *logspb.LogRecord, service, scope string, receivedAt ti
 		SpanID:               hexIDOrEmpty(lr.GetSpanId()),
 		Service:              service,
 		Scope:                scope,
-		Attributes:           flattenAttrs(lr.GetAttributes()),
+		Attributes:           flattenAttrs(attrs),
 	}
 }
 

@@ -206,8 +206,11 @@ and destructive-operation rules. Deeper references live in the repository's
 - When a service exports OpenTelemetry logs, use `orbit trace logs --json`
   with `--service`, `--severity`, `--trace` or `--search` instead of grepping
   stdout; `orbit trace <id> --logs --json` adds a trace's log records. Take
-  `data.latestSeq` before an action and pass it as `--since` to read only what
-  the action logged.
+  `data.latestSeq` before an action and pass it as `--since` (even when it is
+  `0`) to read only what the action logged. When `data.cursorReset` is true the
+  daemon did not issue that cursor, so the page may include records from before
+  the action; take a fresh `latestSeq`. Flags and fields: the repository's
+  `docs/agent-cli.md` (Log records).
 - Treat the JSON envelope's final state and actions as authoritative rather
   than inferring success from exit code or transport state.
 

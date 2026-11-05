@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 )
 
@@ -28,20 +29,36 @@ type LogStore struct {
 
 // Log ingest ceilings. Body and attribute values are truncated rather than
 // dropped: an exception's message and stack trace are the reason to keep a
-// record at all.
+// record at all. The overheads approximate the heap a record and each of its
+// attributes cost beyond their string bytes (struct, string headers, map
+// slots, allocator rounding), so records with many tiny attributes still
+// count against maxLogBytes at roughly their real size. maxLogAttributes is
+// the OTel SDK's default attribute count limit; attributes past it are dropped
+// in export order.
 const (
-	maxLogRecords     = 10000
-	maxLogBytes       = 32 << 20
-	maxLogValueBytes  = 16 << 10
-	logRecordOverhead = 256
+	maxLogRecords        = 10000
+	maxLogBytes          = 32 << 20
+	maxLogValueBytes     = 16 << 10
+	maxLogAttributes     = 128
+	logRecordOverhead    = 256
+	logAttributeOverhead = 96
 )
 
 const truncatedMark = "…[truncated]"
 
 // NewLogStore returns a ring holding at most maxRecords records and roughly
 // maxBytes of record data (each min 1).
+//
+// Seq starts from the wall clock in microseconds rather than 0 so a cursor
+// taken before a daemon restart stays below every Seq the new daemon assigns.
+// A clock stepped backwards can still break that; Query flags such a cursor
+// with CursorReset.
 func NewLogStore(maxRecords, maxBytes int) *LogStore {
-	return &LogStore{maxRecords: max(maxRecords, 1), maxBytes: max(maxBytes, 1)}
+	return &LogStore{
+		maxRecords: max(maxRecords, 1),
+		maxBytes:   max(maxBytes, 1),
+		lastSeq:    time.Now().UnixMicro(),
+	}
 }
 
 // Ingest assigns each record the next Seq and appends it, evicting the oldest
@@ -80,7 +97,8 @@ func (l *LogStore) evictLocked() {
 
 func logRecordBytes(r *LogRecord) int {
 	return logRecordOverhead + len(r.Body) + len(r.SeverityText) + len(r.TraceID) +
-		len(r.SpanID) + len(r.Service) + len(r.Scope) + attrBytes(r.Attributes)
+		len(r.SpanID) + len(r.Service) + len(r.Scope) +
+		len(r.Attributes)*logAttributeOverhead + attrBytes(r.Attributes)
 }
 
 func truncateLogValue(s string) string {
@@ -95,9 +113,11 @@ func truncateLogValue(s string) string {
 }
 
 // Query returns up to limit records that pass f, newest first (limit <= 0
-// returns all). Without f.Since the page holds the newest matches. With it,
+// returns all). Without f.HasSince the page holds the newest matches. With it,
 // the page holds the oldest matches after Since, so passing the page's
-// highest Seq back as Since reads forward without gaps.
+// highest Seq back as Since reads forward without gaps. A Since beyond the
+// latest Seq was not issued by this store; the page then reads from the
+// oldest retained record and sets CursorReset.
 func (l *LogStore) Query(limit int, f LogFilter) LogPage {
 	needle := strings.ToLower(f.Search)
 	l.mu.RLock()
@@ -114,8 +134,13 @@ func (l *LogStore) Query(limit int, f LogFilter) LogPage {
 		page.Logs = append(page.Logs, *r)
 		return true
 	}
-	if f.Since > 0 {
-		start := sort.Search(len(l.records), func(i int) bool { return l.records[i].Seq > f.Since })
+	if f.HasSince {
+		since := f.Since
+		if since > l.lastSeq {
+			page.CursorReset = true
+			since = 0
+		}
+		start := sort.Search(len(l.records), func(i int) bool { return l.records[i].Seq > since })
 		for i := start; i < len(l.records); i++ {
 			if !take(&l.records[i]) {
 				break
@@ -160,8 +185,10 @@ type LogFilter struct {
 	// Search is a case-insensitive substring matched against the body and
 	// every attribute value.
 	Search string
-	// Since keeps only records with a greater Seq.
-	Since int64
+	// HasSince turns on cursor paging: only records with a Seq greater than
+	// Since, oldest matches first. Since 0 is a real cursor, not "unset".
+	HasSince bool
+	Since    int64
 }
 
 func (f LogFilter) matches(r *LogRecord, lowerNeedle string) bool {
@@ -185,17 +212,28 @@ func (f LogFilter) matches(r *LogRecord, lowerNeedle string) bool {
 	return false
 }
 
-// severityLevels are the OTLP severity ranges, each named by its lowest
-// number (TRACE 1-4, DEBUG 5-8, ... FATAL 21-24).
+// The lowest OTLP severity number of each level (TRACE 1-4, DEBUG 5-8, ...
+// FATAL 21-24).
+const (
+	SeverityTrace int32 = 1
+	SeverityDebug int32 = 5
+	SeverityInfo  int32 = 9
+	SeverityWarn  int32 = 13
+	SeverityError int32 = 17
+	SeverityFatal int32 = 21
+)
+
 var severityLevels = []struct {
 	name   string
 	lowest int32
 }{
-	{"trace", 1}, {"debug", 5}, {"info", 9}, {"warn", 13}, {"error", 17}, {"fatal", 21},
+	{"trace", SeverityTrace}, {"debug", SeverityDebug}, {"info", SeverityInfo},
+	{"warn", SeverityWarn}, {"error", SeverityError}, {"fatal", SeverityFatal},
 }
 
 // severityAliases are the level names common loggers put in SeverityText.
 var severityAliases = map[string]string{
+	"verbose":     "trace",
 	"information": "info",
 	"warning":     "warn",
 	"critical":    "fatal",
@@ -206,7 +244,7 @@ var severityAliases = map[string]string{
 var ErrUnknownSeverity = errors.New("unknown severity")
 
 // ParseSeverity maps a level name (trace, debug, info, warn, error, fatal and
-// the aliases information, warning, critical; any case) or an OTLP severity
+// the aliases verbose, information, warning, critical; any case) or an OTLP severity
 // number 1-24 to the lowest severity number of that level.
 func ParseSeverity(s string) (int32, error) {
 	name := strings.ToLower(strings.TrimSpace(s))

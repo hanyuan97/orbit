@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -113,6 +115,7 @@ func TestOTLPLogReceiver(t *testing.T) {
 			store := NewStore(10)
 			srv := httptest.NewServer(store.OTLPHandler())
 			defer srv.Close()
+			base := store.Logs().Query(0, LogFilter{}).LatestSeq
 
 			resp := postLogs(t, srv.URL, tc.contentType, tc.body, tc.gzipped)
 			if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != tc.wantResponseType {
@@ -120,12 +123,12 @@ func TestOTLPLogReceiver(t *testing.T) {
 			}
 
 			page := store.Logs().Query(0, LogFilter{})
-			if len(page.Logs) != 2 || page.LatestSeq != 2 || page.HasMore {
-				t.Fatalf("page = %+v, want 2 records, latestSeq 2", page)
+			if len(page.Logs) != 2 || page.LatestSeq != base+2 || page.HasMore {
+				t.Fatalf("page = %+v, want 2 records, latestSeq %d", page, base+2)
 			}
 			warn, failure := page.Logs[0], page.Logs[1]
 
-			if failure.Seq != 1 || failure.Service != "api" || failure.Scope != "Payments.Controller" ||
+			if failure.Seq != base+1 || failure.Service != "api" || failure.Scope != "Payments.Controller" ||
 				failure.Body != "payment failed" || failure.SeverityNumber != 17 || failure.SeverityText != "Error" ||
 				failure.TimeUnixNano != 1_000_000_000 || failure.ObservedTimeUnixNano != 1_000_000_500 ||
 				failure.TraceID != "0a1b02030405060708090a0b0c0d0e0f" || failure.SpanID != "0101010101010101" {
@@ -175,12 +178,23 @@ func TestOTLPLogReceiverRejectsBadRequests(t *testing.T) {
 	}
 }
 
-func seqs(page LogPage) []int64 {
+// seqs lists a page's Seqs relative to base, the store's LatestSeq before the
+// test ingested anything.
+func seqs(page LogPage, base int64) []int64 {
 	out := make([]int64, len(page.Logs))
 	for i, r := range page.Logs {
-		out[i] = r.Seq
+		out[i] = r.Seq - base
 	}
 	return out
+}
+
+func storeWithRecords(n int) (*LogStore, int64) {
+	store := NewLogStore(100, 1<<20)
+	base := store.Query(0, LogFilter{}).LatestSeq
+	for i := 0; i < n; i++ {
+		store.Ingest([]LogRecord{{Service: "api", Body: fmt.Sprintf("line %d", i+1)}})
+	}
+	return store, base
 }
 
 func equalSeqs(a, b []int64) bool {
@@ -197,19 +211,37 @@ func equalSeqs(a, b []int64) bool {
 
 func TestLogStoreEvictsOldestPastEitherCeiling(t *testing.T) {
 	byCount := NewLogStore(3, 1<<20)
+	countBase := byCount.Query(0, LogFilter{}).LatestSeq
 	for i := 0; i < 5; i++ {
 		byCount.Ingest([]LogRecord{{Service: "api", Body: "line"}})
 	}
 	page := byCount.Query(0, LogFilter{})
-	if got := seqs(page); !equalSeqs(got, []int64{5, 4, 3}) || page.LatestSeq != 5 {
-		t.Errorf("count ceiling kept %v (latest %d), want [5 4 3]", got, page.LatestSeq)
+	if got := seqs(page, countBase); !equalSeqs(got, []int64{5, 4, 3}) || page.LatestSeq != countBase+5 {
+		t.Errorf("count ceiling kept %v (latest %d), want [5 4 3]", got, page.LatestSeq-countBase)
 	}
 
 	big := strings.Repeat("x", 1000)
 	byBytes := NewLogStore(100, 2*(logRecordOverhead+len("api")+len(big)))
+	bytesBase := byBytes.Query(0, LogFilter{}).LatestSeq
 	byBytes.Ingest([]LogRecord{{Service: "api", Body: big}, {Service: "api", Body: big}, {Service: "api", Body: big}})
-	if got := seqs(byBytes.Query(0, LogFilter{})); !equalSeqs(got, []int64{3, 2}) {
+	if got := seqs(byBytes.Query(0, LogFilter{}), bytesBase); !equalSeqs(got, []int64{3, 2}) {
 		t.Errorf("byte ceiling kept %v, want [3 2]", got)
+	}
+
+	tinyAttrs := func() map[string]string {
+		attrs := make(map[string]string, 50)
+		for i := 0; i < 50; i++ {
+			attrs[fmt.Sprintf("k%02d", i)] = "v"
+		}
+		return attrs
+	}
+	attrRecordBytes := logRecordOverhead + len("api") + 50*(logAttributeOverhead+len("k00")+len("v"))
+	byAttrs := NewLogStore(100, 2*attrRecordBytes)
+	attrsBase := byAttrs.Query(0, LogFilter{}).LatestSeq
+	byAttrs.Ingest([]LogRecord{{Service: "api", Attributes: tinyAttrs()}, {Service: "api", Attributes: tinyAttrs()},
+		{Service: "api", Attributes: tinyAttrs()}})
+	if got := seqs(byAttrs.Query(0, LogFilter{}), attrsBase); !equalSeqs(got, []int64{3, 2}) {
+		t.Errorf("many tiny attributes kept %v, want [3 2]: each attribute should cost its overhead", got)
 	}
 
 	huge := NewLogStore(10, 1<<20)
@@ -223,9 +255,112 @@ func TestLogStoreEvictsOldestPastEitherCeiling(t *testing.T) {
 	}
 }
 
+func TestOTLPLogReceiverKeepsTheFirstAttributesUpToTheCap(t *testing.T) {
+	attrs := make([]*commonpb.KeyValue, maxLogAttributes+72)
+	for i := range attrs {
+		attrs[i] = strAttr(fmt.Sprintf("a%03d", i), "v")
+	}
+	export := &collectorlogspb.ExportLogsServiceRequest{ResourceLogs: []*logspb.ResourceLogs{
+		resourceLogs("api", "Chatty", &logspb.LogRecord{Body: stringBody("many fields"), Attributes: attrs}),
+	}}
+	body, err := proto.Marshal(export)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := NewStore(10)
+	srv := httptest.NewServer(store.OTLPHandler())
+	defer srv.Close()
+
+	postLogs(t, srv.URL, "application/x-protobuf", body, false)
+
+	got := store.Logs().Query(0, LogFilter{}).Logs[0].Attributes
+	last, first := fmt.Sprintf("a%03d", maxLogAttributes-1), fmt.Sprintf("a%03d", maxLogAttributes)
+	if len(got) != maxLogAttributes || got["a000"] == "" || got[last] == "" || got[first] != "" {
+		t.Errorf("kept %d attributes (has %s=%q, %s=%q), want the first %d in export order",
+			len(got), last, got[last], first, got[first], maxLogAttributes)
+	}
+}
+
+// TestLogStoreSinceZeroIsACursor is the fresh-daemon case: a cursor of the
+// store's LatestSeq or 0 must read forward from the oldest record after it,
+// not return the newest page and skip what came between.
+func TestLogStoreSinceZeroIsACursor(t *testing.T) {
+	store := NewLogStore(100, 1<<20)
+	cursor := store.Query(0, LogFilter{}).LatestSeq
+	for i := 0; i < 25; i++ {
+		store.Ingest([]LogRecord{{Service: "api", Body: "line"}})
+	}
+
+	page := store.Query(10, LogFilter{HasSince: true, Since: cursor})
+	if got := seqs(page, cursor); !equalSeqs(got, []int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1}) || !page.HasMore {
+		t.Fatalf("since latestSeq = %v hasMore=%v, want the oldest 10 and more", got, page.HasMore)
+	}
+	read := 0
+	for since := cursor; ; {
+		page := store.Query(10, LogFilter{HasSince: true, Since: since})
+		if page.CursorReset {
+			t.Fatalf("since %d flagged as a reset cursor", since-cursor)
+		}
+		read += len(page.Logs)
+		if !page.HasMore {
+			break
+		}
+		since = page.Logs[0].Seq
+	}
+	if read != 25 {
+		t.Errorf("paging from the cursor read %d records, want all 25", read)
+	}
+
+	fromZero := store.Query(10, LogFilter{HasSince: true, Since: 0})
+	if got := seqs(fromZero, cursor); !equalSeqs(got, []int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1}) || fromZero.CursorReset {
+		t.Errorf("since 0 = %v reset=%v, want the oldest 10", got, fromZero.CursorReset)
+	}
+	if got := seqs(store.Query(10, LogFilter{}), cursor); got[0] != 25 {
+		t.Errorf("without since = %v, want the newest page", got)
+	}
+}
+
+// TestLogStoreSeqSurvivesARestart models `orbit down && orbit up`: a cursor
+// from the old store still reads every record of the new one.
+func TestLogStoreSeqSurvivesARestart(t *testing.T) {
+	before, base := storeWithRecords(5)
+	cursor := before.Query(0, LogFilter{}).LatestSeq
+	if cursor != base+5 || base < time.Now().Add(-time.Hour).UnixMicro() {
+		t.Fatalf("seq should start from the wall clock in microseconds: base %d, latest %d", base, cursor)
+	}
+	for time.Now().UnixMicro() <= cursor {
+		time.Sleep(time.Microsecond)
+	}
+
+	after, _ := storeWithRecords(3)
+	page := after.Query(0, LogFilter{HasSince: true, Since: cursor})
+	if len(page.Logs) != 3 || page.CursorReset {
+		t.Errorf("old cursor on the restarted store returned %d records (reset=%v), want all 3", len(page.Logs), page.CursorReset)
+	}
+}
+
+// TestLogStoreFlagsACursorItDidNotIssue covers the clock stepping back across
+// a restart: the cursor is past LatestSeq, so the page says so and starts at
+// the oldest retained record instead of waiting for Seq to catch up.
+func TestLogStoreFlagsACursorItDidNotIssue(t *testing.T) {
+	store, base := storeWithRecords(3)
+	latest := store.Query(0, LogFilter{}).LatestSeq
+
+	page := store.Query(2, LogFilter{HasSince: true, Since: latest + 1000})
+	if got := seqs(page, base); !page.CursorReset || !equalSeqs(got, []int64{2, 1}) || !page.HasMore {
+		t.Errorf("stale cursor = %v reset=%v hasMore=%v, want reset and the oldest 2", got, page.CursorReset, page.HasMore)
+	}
+	for _, f := range []LogFilter{{HasSince: true, Since: latest}, {Since: latest + 1000}} {
+		if page := store.Query(0, f); page.CursorReset {
+			t.Errorf("%+v: cursorReset set for a cursor this store issued or no cursor at all", f)
+		}
+	}
+}
+
 func TestParseSeverity(t *testing.T) {
 	for in, want := range map[string]int32{
-		"warn": 13, "Warning": 13, "ERROR": 17, "information": 9, "critical": 21, "trace": 1, "7": 7,
+		"warn": SeverityWarn, "Warning": SeverityWarn, "ERROR": SeverityError, "information": SeverityInfo,
+		"critical": SeverityFatal, "trace": SeverityTrace, "Verbose": SeverityTrace, "debug": SeverityDebug, "7": 7,
 	} {
 		if got, err := ParseSeverity(in); err != nil || got != want {
 			t.Errorf("ParseSeverity(%q) = %d, %v; want %d", in, got, err, want)
@@ -236,7 +371,9 @@ func TestParseSeverity(t *testing.T) {
 			t.Errorf("ParseSeverity(%q) err = %v, want ErrUnknownSeverity", in, err)
 		}
 	}
-	if SeverityName(14) != "WARN" || SeverityName(0) != "" {
-		t.Errorf("SeverityName: 14=%q 0=%q", SeverityName(14), SeverityName(0))
+	if SeverityName(14) != "WARN" || SeverityName(SeverityError) != "ERROR" || SeverityName(SeverityError-1) != "WARN" ||
+		SeverityName(0) != "" {
+		t.Errorf("SeverityName: 14=%q 17=%q 16=%q 0=%q", SeverityName(14), SeverityName(SeverityError),
+			SeverityName(SeverityError-1), SeverityName(0))
 	}
 }

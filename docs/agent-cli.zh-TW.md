@@ -371,39 +371,10 @@ log record（`data.logs`）。該 trace 的 stdout log 行走 daemon 的
 
 ### Log records
 
-OpenTelemetry exporter 也會送 log 的服務，會把結構化 log record 送到同一個
-receiver。用 `orbit trace logs` 讀取；`orbit logs <resource>` 仍然讀該
-resource 的 stdout。
-
-```bash
-orbit trace logs --json                          # 所有服務最新 100 筆 record
-orbit trace logs --service api --severity warn --json   # api 的 warning 以上
-orbit trace logs --trace <trace-id> --json       # 一個 request 的所有 record
-orbit trace logs --search "card declined" --json # 比對 body 或任一 attribute 值
-orbit trace logs --since 1234 --json             # 只取 seq 1234 之後的 record
-```
-
-`--severity` 是最低等級：`trace`、`debug`、`info`、`warn`、`error`、`fatal`
-（也接受 `information`、`warning`、`critical`，或 OTLP 數字 1-24）。設定後，
-沒有 severity 的 record 會被濾掉。`--service` 必須是設定中的 resource，或已經
-送過 record 的 service；其他名稱會以 `unknown_resource` 失敗。`--limit 0`
-回傳所有相符的 record。
-
-`data.logs` 由新到舊排列。每筆有 `seq`、`timeUnixNano`、
-`observedTimeUnixNano`、`severityNumber`、`severityText`、`body`、`traceId`、
-`spanId`、`service`、`scope` 與 `attributes`（字串值，包含
-`exception.type`、`exception.message`、`exception.stacktrace`）。`seq` 跨所有
-服務遞增。非字串的 body 以 JSON 呈現；exporter 沒標事件時間時
-`timeUnixNano` 為 `0`。`severityText`、`traceId`、`spanId`、`scope`、
-`attributes` 為空時省略。這些欄位名由 contract test 釘住。
-
-只想讀某個動作之後發生的事：動作前先記下 `data.latestSeq`，之後把它當
-`--since` 傳入。帶 `--since` 時，回傳的是該 seq 之後最舊的相符 record；
-`data.hasMore` 為 true 就用這頁最大的 `seq` 繼續讀。`hasMore` 為 false 時，
-`latestSeq` 就是下一個 cursor。沒帶 `--since` 時，`hasMore` 表示還有更舊的
-相符 record 超出 `--limit`。Record 存在有上限的記憶體 ring（見
-[tracing.zh-TW.md](tracing.zh-TW.md)），cursor 若比 ring 還舊，被淘汰的
-record 會直接略過、不會提示。
+服務的 OpenTelemetry exporter 也送 log 時，結構化 log record 會進到同一個
+receiver，用 `orbit trace logs --json` 讀取；`orbit logs <resource>` 仍然讀該
+resource 的 stdout。旗標、`data.logs` 欄位與 `--since` cursor 規則只維護一份，
+見英文版 [agent-cli.md 的 Log records](agent-cli.md#log-records)。
 
 ## Inspect
 

@@ -38,8 +38,8 @@ keep their severity, trace and span ids, and attributes (including exception.*).
 A service ships them only when its OpenTelemetry logging exporter is set up.
 
 --search matches the body and every attribute value. --since takes a record's
-seq and returns only newer records, oldest-first up to --limit, so passing the
-highest seq back reads forward without gaps.`,
+seq (or latestSeq) and returns only newer records, oldest-first up to --limit,
+so passing the highest seq back reads forward without gaps.`,
 		Args: cobra.NoArgs,
 		RunE: runTraceLogs,
 	}
@@ -52,8 +52,9 @@ highest seq back reads forward without gaps.`,
 	return cmd
 }
 
-func runTraceLogs(_ *cobra.Command, _ []string) error {
+func runTraceLogs(cmd *cobra.Command, _ []string) error {
 	filter := logRecordFilter
+	filter.HasSince = cmd.Flags().Changed("since")
 	if logRecordLimit < 0 {
 		return cli.NewInvalidArgumentError(fmt.Sprintf("--limit must be zero or more, got %d", logRecordLimit))
 	}
@@ -79,12 +80,12 @@ func runTraceLogs(_ *cobra.Command, _ []string) error {
 	if cli.JSONOutput {
 		return cli.WriteJSONSuccess(os.Stdout, commandString(), page, nil)
 	}
-	if len(page.Logs) == 0 && page.LatestSeq == 0 {
+	if len(page.Logs) == 0 && filter == (tracing.LogFilter{}) {
 		st, _ := tracingStatus(client)
 		printNoLogRecords(os.Stdout, st)
 		return nil
 	}
-	printLogRecordPage(os.Stdout, page, filter.Since > 0)
+	printLogRecordPage(os.Stdout, page, filter)
 	return nil
 }
 
@@ -99,7 +100,7 @@ func listLogRecords(c *daemon.Client, limit int, severity string, f tracing.LogF
 			q.Set(key, value)
 		}
 	}
-	if f.Since > 0 {
+	if f.HasSince {
 		q.Set("since", strconv.FormatInt(f.Since, 10))
 	}
 	resp, err := c.Get("/api/otel/logs?" + q.Encode())
@@ -124,14 +125,18 @@ func listLogRecords(c *daemon.Client, limit int, severity string, f tracing.LogF
 
 // printLogRecordPage renders a page oldest first, like a log tail, and a
 // footer naming the --since cursor that continues from it.
-func printLogRecordPage(w io.Writer, page *tracing.LogPage, paging bool) {
+func printLogRecordPage(w io.Writer, page *tracing.LogPage, f tracing.LogFilter) {
 	printLogRecords(w, page.Logs, "")
 	if len(page.Logs) > 0 {
 		fmt.Fprintln(w)
 	}
 	footer := fmt.Sprintf("%d record(s).", len(page.Logs))
+	if page.CursorReset {
+		footer = fmt.Sprintf("--since %d was not issued by this daemon (it restarted, or the clock moved back); showing from the oldest retained record. ",
+			f.Since) + footer
+	}
 	switch {
-	case paging && page.HasMore:
+	case f.HasSince && page.HasMore:
 		footer += fmt.Sprintf(" More follow: --since %d.", page.Logs[0].Seq)
 	case page.HasMore:
 		footer += fmt.Sprintf(" Older matches withheld by --limit. Newer records later: --since %d.", page.LatestSeq)
@@ -182,9 +187,9 @@ func logRecordLevel(r *tracing.LogRecord) string {
 	}
 	cell := padRight(level, 5)
 	switch {
-	case r.SeverityNumber >= 17:
+	case r.SeverityNumber >= tracing.SeverityError:
 		return cli.Red.Sprint(cell)
-	case r.SeverityNumber >= 13:
+	case r.SeverityNumber >= tracing.SeverityWarn:
 		return cli.Yellow.Sprint(cell)
 	default:
 		return cell
