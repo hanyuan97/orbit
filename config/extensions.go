@@ -123,18 +123,6 @@ func decodeExtensionSections(cfg *Config, cfgPath string) error {
 	return nil
 }
 
-func isIgnoredTopLevelKey(name string) bool {
-	return strings.HasPrefix(name, "x-")
-}
-
-func dropIgnoredTopLevelKeys(cfg *Config) {
-	for name := range cfg.Extensions {
-		if isIgnoredTopLevelKey(name) {
-			delete(cfg.Extensions, name)
-		}
-	}
-}
-
 func validateExtensionSectionNames(cfg *Config) error {
 	extensionSections.mu.RLock()
 	defer extensionSections.mu.RUnlock()
