@@ -383,14 +383,9 @@ func resourceReadinessCheck(
 	if port == 0 {
 		return nil
 	}
-	return &config.HealthCheckConfig{
-		Type:             "tcp",
-		Port:             port,
-		Interval:         settings.HealthCheckInterval,
-		Timeout:          settings.HealthCheck.Timeout,
-		Retries:          settings.HealthCheck.Retries,
-		FailureThreshold: settings.HealthCheck.FailureThreshold,
-	}
+	hc := &config.HealthCheckConfig{Type: "tcp", Port: port}
+	config.ApplyHealthCheckDefaults(hc, ports, settings)
+	return hc
 }
 
 func (a *App) newPoller(cfg *config.Config, orch *Orchestrator) *container.Poller {

@@ -250,7 +250,7 @@ func applyDefaults(cfg *Config) {
 		if c.PullPolicy == "" {
 			c.PullPolicy = "always"
 		}
-		applyHealthCheckDefaults(c.HealthCheck, c.Ports, cfg.Settings)
+		ApplyHealthCheckDefaults(c.HealthCheck, c.Ports, cfg.Settings)
 	}
 
 	for _, s := range cfg.Services {
@@ -260,7 +260,7 @@ func applyDefaults(cfg *Config) {
 		if s.Type == "" {
 			s.Type = inferServiceType(s.Command)
 		}
-		applyHealthCheckDefaults(s.HealthCheck, s.Ports, cfg.Settings)
+		ApplyHealthCheckDefaults(s.HealthCheck, s.Ports, cfg.Settings)
 		if s.Type == "dotnet" && s.Command == "" {
 			s.Command = "dotnet watch run"
 		}
@@ -307,9 +307,10 @@ func applyHealthCheckSettingsDefaults(defaults *HealthCheckSettings) {
 	}
 }
 
-// applyHealthCheckDefaults fills the zero fields of a health_check stanza.
-// Shared by the container and service loops so the two can't drift.
-func applyHealthCheckDefaults(
+// ApplyHealthCheckDefaults fills the zero fields of a health_check stanza.
+// Shared by the container and service loops, and by the engine's inferred
+// readiness check, so none of them can drift.
+func ApplyHealthCheckDefaults(
 	hc *HealthCheckConfig,
 	ports map[string]PortDef,
 	settings RuntimeSettings,
