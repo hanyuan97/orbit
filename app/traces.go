@@ -78,7 +78,8 @@ func traceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "trace [trace-id]",
 		Short: "List traces, or show one trace by ID",
-		Long: `List recent local traces. Pass a trace ID to show its waterfall.
+		Long: `List recent local traces. Pass a trace ID to show its waterfall, or use
+'orbit trace logs' for the OTLP log records services export.
 
 Traces of Orbit's own health probes are hidden unless they errored; pass
 --include-health to show them. --search matches every span's service, name
@@ -94,7 +95,7 @@ arrived yet is not recognised as health traffic.`,
 			return runTracesList(cmd, args)
 		},
 	}
-	cmd.Flags().BoolVar(&traceShowLogs, "logs", false, "inline log lines that carry this trace id")
+	cmd.Flags().BoolVar(&traceShowLogs, "logs", false, "add the log lines and OTLP log records that carry this trace id")
 	// 50 ≈ a couple of terminal screenfuls; the API default (100) and the
 	// dashboard (200) serve different surfaces.
 	cmd.Flags().IntVar(&traceLimit, "limit", 50, "max number of traces to show")
@@ -102,6 +103,7 @@ arrived yet is not recognised as health traffic.`,
 	cmd.Flags().StringVar(&traceFilter.Search, "search", "", "case-insensitive text in a span name or attribute value (with -f: root and services only)")
 	cmd.Flags().StringVar(&traceFilter.Service, "service", "", "only traces that include this service")
 	cmd.Flags().BoolVar(&traceFilter.IncludeHealth, "include-health", false, "also show traces of Orbit's health probes")
+	cmd.AddCommand(traceLogsCmd())
 	return cmd
 }
 
@@ -371,14 +373,33 @@ func runTraceShow(_ *cobra.Command, args []string) error {
 	}
 
 	if cli.JSONOutput {
-		return cli.WriteJSONSuccess(os.Stdout, commandString(), trace, nil)
+		if !traceShowLogs {
+			return cli.WriteJSONSuccess(os.Stdout, commandString(), trace, nil)
+		}
+		page, err := traceLogRecords(client, trace.TraceID)
+		if err != nil {
+			return fmt.Errorf("trace log records failed: %w", err)
+		}
+		return cli.WriteJSONSuccess(os.Stdout, commandString(), traceWithLogRecords{Trace: trace, Logs: page.Logs}, nil)
 	}
 
 	renderWaterfall(os.Stdout, trace)
 	if traceShowLogs {
 		renderTraceLogs(os.Stdout, client, trace)
+		renderTraceLogRecords(os.Stdout, client, trace)
 	}
 	return nil
+}
+
+// traceWithLogRecords is `orbit trace <id> --logs --json`: the trace's fields
+// flattened beside its OTLP log records.
+type traceWithLogRecords struct {
+	*tracing.Trace
+	Logs []tracing.LogRecord `json:"logs"`
+}
+
+func traceLogRecords(c *daemon.Client, traceID string) (*tracing.LogPage, error) {
+	return listLogRecords(c, 0, "", tracing.LogFilter{TraceID: traceID})
 }
 
 // renderWaterfall prints the trace header and a span timeline. Bars are
@@ -445,6 +466,24 @@ func renderTraceLogs(w io.Writer, client *daemon.Client, t *tracing.Trace) {
 	for _, l := range lines {
 		fmt.Fprintf(w, "  %s %s\n", cli.Faint.Sprint(l.Service), l.Line)
 	}
+}
+
+// renderTraceLogRecords prints the OTLP log records stamped with the trace id.
+// The log-record ring is bounded separately from the trace ring, so records
+// can age out while their trace is still listed.
+func renderTraceLogRecords(w io.Writer, client *daemon.Client, t *tracing.Trace) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, cli.Bold.Sprint("log records for this trace:"))
+	page, err := traceLogRecords(client, t.TraceID)
+	if err != nil {
+		fmt.Fprintf(w, "  %s\n", cli.Faint.Sprintf("(log records unavailable: %v)", err))
+		return
+	}
+	if len(page.Logs) == 0 {
+		fmt.Fprintf(w, "  %s\n", cli.Faint.Sprint("(no OTLP log records carry this trace id)"))
+		return
+	}
+	printLogRecords(w, page.Logs, "  ")
 }
 
 func spanLabel(sp *tracing.Span) string {

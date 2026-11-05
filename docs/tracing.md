@@ -54,8 +54,9 @@ orbit trace --search item/1  # traces whose span names or attribute values match
 orbit trace --service api    # traces that include that service
 orbit trace --json           # structured list (for agents); with -f, NDJSON
 orbit trace <id>             # ASCII waterfall of one trace
-orbit trace <id> --logs      # waterfall + log lines carrying this trace id
+orbit trace <id> --logs      # waterfall + log lines and log records carrying this trace id
 orbit trace <id> --json      # full span tree + per-span data
+orbit trace logs             # OTLP log records (see Log records below)
 orbit tracing status         # is the receiver healthy? which port? counters
 ```
 
@@ -105,6 +106,36 @@ On the Services graph, the **Live** toggle pulses the flow-dot along edges that
 recently carried a trace — an ambient "the system is moving" view, separate from
 single-trace playback.
 
+## Log records
+
+A service whose OpenTelemetry logging pipeline has an OTLP exporter sends its
+log records to the same receiver (`/v1/logs`); it reads the endpoint Orbit
+injects, so no extra configuration is needed. Orbit keeps each record's
+severity, body, trace and span ids, scope, and attributes, including
+`exception.type`, `exception.message` and `exception.stacktrace`. Records are
+attributed to the resource's `service.name`, like spans. Metrics sent to
+`/v1/metrics` are accepted and dropped.
+
+```bash
+orbit trace logs                              # newest 100 records, oldest first on screen
+orbit trace logs --service api --severity warn
+orbit trace logs --trace <trace-id>           # every record of one request
+orbit trace logs --search "card declined"     # body or any attribute value
+orbit trace logs --since 1234                 # only records after seq 1234
+orbit trace logs --json                       # structured page (for agents)
+```
+
+Each line prints the time, level, service, body and trace id, with the
+exception on the lines below. The footer names the `--since` value that reads
+only newer records. `orbit logs <resource>` is unchanged and still shows the
+resource's stdout.
+
+Records live in one in-memory ring shared by every service and are dropped on
+`orbit down`. The ring keeps at most 10,000 records and about 32 MiB of record
+data, evicting the oldest past either limit. A body or attribute value longer
+than 16 KiB is truncated. The JSON contract, including `--since` paging, is in
+[agent-cli.md](agent-cli.md#log-records).
+
 ## Logs ↔ traces
 
 Because Orbit owns both the trace store and the log stream, and the logs already
@@ -117,7 +148,7 @@ carry `TraceId`/`SpanId`, the join is **exact** — never a fuzzy timestamp matc
 ## How it works
 
 ```
-dev service ──OTLP/HTTP──▶ daemon receiver (:4318) ──▶ ring buffer
+dev service ──OTLP/HTTP──▶ daemon receiver (:4318) ──▶ trace + log-record rings
                                                           │
    CLI (orbit trace)  ◀── unix socket ◀──────────────────┤
    dashboard          ◀── HTTP + SSE 'trace' event ◀──────┘

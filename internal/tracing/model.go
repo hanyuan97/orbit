@@ -1,10 +1,11 @@
-// Package tracing implements Orbit's built-in local trace store: an
-// in-memory ring buffer of OTLP spans, an OTLP/HTTP receiver, and query +
-// subscription APIs for the CLI and dashboard.
+// Package tracing implements Orbit's built-in local telemetry store: in-memory
+// ring buffers of OTLP spans and log records, an OTLP/HTTP receiver, and query
+// + subscription APIs for the CLI and dashboard.
 //
 // model.go holds only the wire types (exported to TypeScript via tygo). The
-// store and OTLP ingest live in tracing.go and otlp.go and are excluded from
-// tygo because they carry locks and protobuf types TS must never see.
+// stores and OTLP ingest live in tracing.go, logs.go and otlp.go and are
+// excluded from tygo because they carry locks and protobuf types TS must never
+// see.
 package tracing
 
 // Span is one span within a trace. Times are unix-nanoseconds (numbers in TS)
@@ -84,4 +85,33 @@ type TracingStatus struct {
 	// body, per-trace span cap, or attribute-bytes cap). Non-zero means the
 	// store is shedding load, not that nothing is arriving.
 	SpansDropped int64 `json:"spansDropped"`
+}
+
+// LogRecord is one OTLP log record. Seq is assigned by Orbit on ingest and
+// increases monotonically across every service, so a reader can resume after
+// the last record it saw. TimeUnixNano is 0 when the exporter did not stamp
+// the event; ObservedTimeUnixNano falls back to the receive time.
+// SeverityNumber follows the OTLP scale (1-24; 0 = unspecified).
+type LogRecord struct {
+	Seq                  int64             `json:"seq"`
+	TimeUnixNano         int64             `json:"timeUnixNano"`
+	ObservedTimeUnixNano int64             `json:"observedTimeUnixNano"`
+	SeverityNumber       int32             `json:"severityNumber"`
+	SeverityText         string            `json:"severityText,omitempty"`
+	Body                 string            `json:"body"`
+	TraceID              string            `json:"traceId,omitempty"`
+	SpanID               string            `json:"spanId,omitempty"`
+	Service              string            `json:"service"`
+	Scope                string            `json:"scope,omitempty"`
+	Attributes           map[string]string `json:"attributes,omitempty"`
+}
+
+// LogPage is one query over the log-record store, newest first. LatestSeq is
+// the newest stored record's Seq regardless of filters (0 when empty), so a
+// reader can take a cursor before acting. HasMore reports that the limit
+// withheld matching records.
+type LogPage struct {
+	Logs      []LogRecord `json:"logs"`
+	LatestSeq int64       `json:"latestSeq"`
+	HasMore   bool        `json:"hasMore"`
 }

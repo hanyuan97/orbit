@@ -203,6 +203,11 @@ and destructive-operation rules. Deeper references live in the repository's
   for span attributes (URL, route, SQL, database). Orbit's own health-probe
   traces are hidden by default. Flags and fields: the repository's
   `docs/agent-cli.md` (Traces).
+- When a service exports OpenTelemetry logs, use `orbit trace logs --json`
+  with `--service`, `--severity`, `--trace` or `--search` instead of grepping
+  stdout; `orbit trace <id> --logs --json` adds a trace's log records. Take
+  `data.latestSeq` before an action and pass it as `--since` to read only what
+  the action logged.
 - Treat the JSON envelope's final state and actions as authoritative rather
   than inferring success from exit code or transport state.
 
