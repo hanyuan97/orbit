@@ -921,9 +921,9 @@ func TestLoadRejectsInvalidSettingsHealthCheck(t *testing.T) {
 		value string
 		want  string
 	}{
-		{"timeout", "-1s", "settings.health_check.timeout must be positive"},
-		{"retries", "-1", "settings.health_check.retries must be at least 1"},
-		{"failure_threshold", "-2", "settings.health_check.failure_threshold must be at least 1"},
+		{"timeout", "-1s", "settings.health_check.timeout must be zero or positive"},
+		{"retries", "-1", "settings.health_check.retries must be zero or positive"},
+		{"failure_threshold", "-2", "settings.health_check.failure_threshold must be zero or positive"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.field, func(t *testing.T) {
